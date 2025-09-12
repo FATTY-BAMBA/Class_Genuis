@@ -4,7 +4,6 @@
 # wheel
 
 # FIXED: Remove restrictive packaging constraint that causes pip 24.x conflicts
-# packaging<=24.1  # REMOVED - this was causing the build failure
 packaging>=20.0
 
 # Torch stack (Dockerfile sets exact versions; these ranges are fine)
@@ -43,7 +42,7 @@ imgaug==0.4.0
 attrdict==2.0.1
 beautifulsoup4==4.13.4
 fire==0.7.1
-fonttools==4.59.1
+fonttools==4.51.0  # Updated to match requirements
 lmdb==1.7.3
 openpyxl==3.1.5
 pdf2docx==0.5.8
@@ -51,11 +50,11 @@ premailer==3.10.0
 rapidfuzz==3.13.0
 visualdl==2.5.3
 
-# Critical pins to avoid segfaults / ABI issues
-numpy==1.24.4
+# Critical pins to avoid segfaults / ABI issues - ALIGNED WITH BUILDER STAGE
+numpy==1.26.4  # Changed from 1.24.4 to match builder stage
 PyMuPDF==1.22.5
 python-docx==1.2.0
-protobuf==3.20.3
+protobuf>=3.20.0,<4  # More flexible than ==3.20.3
 
 # SciPy stack
 llvmlite==0.43.0
@@ -64,7 +63,7 @@ tqdm==4.67.1
 scipy==1.10.1
 scikit-learn==1.0.2
 scikit-image==0.21.0
-onnxruntime==1.19.2
+onnxruntime==1.15.1  # Changed from 1.19.2 to match builder stage
 
 # Background workers
 redis==6.0.0

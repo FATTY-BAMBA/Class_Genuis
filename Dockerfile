@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1
 # ---- Stage 1: The Builder ----
-# Start from a guaranteed-stable official Python image
 FROM python:3.10-slim AS builder
 
 # Set ARGs and ENV vars needed for the build
@@ -19,46 +18,31 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     nodejs build-essential cmake git wget curl \
     libcairo2-dev libjpeg-dev libgif-dev pkg-config \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip in the global environment of this stable image
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# Install all Python dependencies
+# Copy requirements early to leverage Docker cache
+COPY requirements.txt /tmp/requirements.txt
+COPY constraints.txt /tmp/constraints.txt
+ENV PIP_CONSTRAINT=/tmp/constraints.txt
+
+# Install core dependencies first (these are stable and less likely to conflict)
 RUN python -m pip install \
-    "numpy==1.26.4" \
-    "packaging==23.2" \
+    "packaging>=20.0" \
     "Cython==3.0.10" \
     "pybind11==2.12.0" \
     "meson==1.2.3" \
     "meson-python==0.15.0" \
-    "ninja==1.11.1" \
-    "onnxruntime==1.15.1" \
-    "opencv-python-headless==4.7.0.72" \
-    "scikit-learn==1.0.2" \
-    "scikit-image==0.21.0" \
-    "PyMuPDF==1.22.5" \
-    "python-docx==1.2.0" \
-    "fonttools==4.51.0" \
-    "pyclipper==1.3.0.post6" \
-    "attrdict==2.0.1" \
-    "beautifulsoup4==4.13.4" \
-    "fire==0.7.1" \
-    "lmdb==1.7.3" \
-    "openpyxl==3.1.5" \
-    "premailer==3.10.0" \
-    "rapidfuzz==3.13.0" \
-    "imgaug==0.4.0" \
-    "pdf2docx==0.5.8" \
-    "lanms-neo==1.0.2" \
-    "Polygon3==3.0.9.1" \
-    "pycairo==${PYCAIRO_VERSION}"
+    "ninja==1.11.1"
 
-# Install visualdl directly from PyPI (Option 1 - recommended)
+# Install main application requirements (this will handle all version resolution)
+RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Install visualdl directly from PyPI
 RUN python -m pip install "visualdl==2.5.3"
-
-# Alternative: Install from specific git branch if PyPI version doesn't work
-# RUN python -m pip install git+https://github.com/PaddlePaddle/VisualDL.git@release/2.5
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
 ARG BUILD_VARIANT=gpu
@@ -70,7 +54,6 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
 RUN python -m pip install "paddleocr==2.6.1"
 
 # ---- Stage 2: The Final Image ----
-# Start from the same stable Python base
 FROM python:3.10-slim AS final
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
@@ -98,7 +81,7 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Install only the necessary runtime shared libraries from the OS
+# Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg redis-tools libsndfile1 libgl1 libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
@@ -106,11 +89,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the entire Python environment from the builder stage
 COPY --from=builder /usr/local/ /usr/local/
 
-# Copy application-specific dependencies and code
-COPY requirements.txt .
-COPY constraints.txt /tmp/constraints.txt
-ENV PIP_CONSTRAINT=/tmp/constraints.txt
-RUN python -m pip install --no-cache-dir -r requirements.txt
+# Copy application code only (no need to install anything)
 COPY . .
 
 RUN chmod +x /app/start.sh
