@@ -31,7 +31,6 @@ COPY constraints.txt /tmp/constraints.txt
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
 
 # Install core dependencies first (these are stable and less likely to conflict)
-# FIXED: Removed pip cache purge since PIP_NO_CACHE_DIR=1 disables cache
 RUN python -m pip install \
     "packaging>=20.0" \
     "Cython==3.0.10" \
@@ -40,20 +39,17 @@ RUN python -m pip install \
     "meson-python==0.15.0" \
     "ninja==1.11.1"
 
-# Install main application requirements with cleanup
-# FIXED: Removed pip cache purge
+# Install main application requirements
+# IMPORTANT: Don't delete /tmp/* yet as constraints.txt is still needed
 RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm -rf /tmp/* \
     && rm -rf ~/.cache/pip \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
 # Install visualdl directly from PyPI
-# FIXED: Removed pip cache purge
 RUN python -m pip install "visualdl==2.5.3"
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
-# FIXED: Removed pip cache purge
 ARG BUILD_VARIANT=gpu
 RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle-gpu==${PADDLE_VERSION_GPU}"; \
@@ -61,15 +57,18 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle==${PADDLE_VERSION_CPU}"; \
     fi
 
+# Install paddleocr
 RUN python -m pip install "paddleocr==2.6.1" \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
-# Final cleanup in builder stage
+# NOW we can clean up /tmp/* after all pip installs are done
+# Also unset PIP_CONSTRAINT since we're done with it
 RUN rm -rf /tmp/* \
     && rm -rf ~/.cache \
     && apt-get autoremove -y \
     && apt-get autoclean
+ENV PIP_CONSTRAINT=
 
 # ---- Stage 2: The Final Image ----
 FROM python:3.10-slim AS final
