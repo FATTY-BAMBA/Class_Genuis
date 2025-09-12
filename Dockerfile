@@ -13,7 +13,7 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 PIP_DEFAULT_TIMEOUT=600
 
-# Install system dependencies, including Node.js for visualdl build
+# Install system dependencies, including a modern Node.js for visualdl build
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends \
@@ -21,8 +21,7 @@ RUN apt-get update && \
     libcairo2-dev libjpeg-dev libgif-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# ### THIS IS THE FIX ###
-# Upgrade pip to the latest version BEFORE installing other packages
+# Upgrade pip in the global environment of this stable image
 RUN python -m pip install --upgrade pip setuptools wheel
 
 # Install all Python dependencies
