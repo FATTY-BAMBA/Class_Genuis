@@ -1,0 +1,78 @@
+# --- toolchain managed in Dockerfile; do NOT constrain here ---
+# pip
+# setuptools
+# wheel
+
+# FIXED: Remove restrictive packaging constraint that causes pip 24.x conflicts
+# packaging<=24.1  # REMOVED - this was causing the build failure
+packaging>=20.0
+
+# Torch stack (Dockerfile sets exact versions; these ranges are fine)
+torch>=2.2,<2.3
+torchvision>=0.17,<0.18
+torchaudio>=2.2,<2.3
+torchmetrics==1.4.2
+lightning==2.4.0
+
+# HF ecosystem
+transformers>=4.45.1,<4.57
+tokenizers>=0.22.0,<0.24
+sentencepiece>=0.2.0,<0.3
+accelerate>=1.1.1
+optimum>=1.22.0
+peft>=0.17.1
+safetensors>=0.4.5
+
+openai==1.55.3
+faster-whisper==1.1.0
+ctranslate2==4.4.0
+hdbscan==0.8.33
+google-generativeai==0.8.3
+rouge-score==0.1.2
+tabulate==0.9.0
+wandb==0.18.7
+rich==13.9.4
+
+# Imaging / vision
+opencv-python-headless==4.7.0.72
+pillow==9.5.0
+easyocr==1.7.1
+imgaug==0.4.0
+
+# OCR / misc deps
+attrdict==2.0.1
+beautifulsoup4==4.13.4
+fire==0.7.1
+fonttools==4.59.1
+lmdb==1.7.3
+openpyxl==3.1.5
+pdf2docx==0.5.8
+premailer==3.10.0
+rapidfuzz==3.13.0
+visualdl==2.5.3
+
+# Critical pins to avoid segfaults / ABI issues
+numpy==1.24.4
+PyMuPDF==1.22.5
+python-docx==1.2.0
+protobuf==3.20.3
+
+# SciPy stack
+llvmlite==0.43.0
+numba==0.60.0
+tqdm==4.67.1
+scipy==1.10.1
+scikit-learn==1.0.2
+scikit-image==0.21.0
+onnxruntime==1.19.2
+
+# Background workers
+redis==6.0.0
+celery==5.5.2
+billiard==4.2.1
+vine==5.1.0
+ffmpeg-python==0.2.0
+pydub==0.25.1
+pytz==2023.3.post1
+tzlocal==4.3
+pycocoevalcap==1.2

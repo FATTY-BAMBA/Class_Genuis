@@ -1,0 +1,29 @@
+# Ignore Python's cache files
+__pycache__/
+*.pyc
+
+# Ignore IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# --- IGNORE LARGE DATA AND MODELS ---
+# Ignore all video files
+*.mp4
+
+# Ignore the large model files
+models/
+
+# Ignore the downloaded cudnn package
+cudnn/
+
+# Ignore other potential data folders
+uploads/
+video_cache/
+outputs/
+segments/
+
+# Ignore all environment files containing secrets
+*.env
+nference.env
+app/*.env

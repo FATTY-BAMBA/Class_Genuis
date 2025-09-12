@@ -1,0 +1,325 @@
+[
+  {
+    "start": 0.0,
+    "end": 600.0,
+    "timestamp": 0.0,
+    "text": "Chapter1Python技術及開發環境介绍\n72/99\n一一110%+|\npython\n縮排\n■缩排的意義在於將同樣辑之下的程式碼放再一起運行\n簡單就是將程式碼進行區段包覆的動作。\nx=10\ny=5\nif(x>y){\nJAVA/C\n一般程式語言大都是用{}\nz=x+y\n大括號進行縮排的實作\nprint(z)\nprint(x-y)\n2022-08-1313:01:38\nO\n36℃多雲\n物中\n2022/8/13",
+    "keywords": [
+      "print",
+      "2022",
+      "chapter1python技術及開發環境介绍",
+      "一一110",
+      "python"
+    ],
+    "blip_caption": "an image of a computer screen with a picture of a computer screen with a picture of a computer screen",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 600.0,
+    "end": 1200.0,
+    "timestamp": 600.0,
+    "text": "Spyder (Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n个\n口\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）sourcecode\nC:UsersUSERDesktopiPythonchapter1(Python技術及開發環境介绍）)sourcecodelch1_est3.py\n口\nch1_testl.py xch1_1.py xch1_test2.py x\nch1_test3.py x\nName\nDateModified\n ch1_1.py\n2022/8/13上午09:30\n3\nCreated\nd on Sat Aug 13 12:02:53 202\nch1_test1.py 2022/8/13 上午 11:50\n4\nch1_test2.py 2022/8/13 下午 12:01\nch1_test3.py 2022/8/13 下午 01:11\n5\n@author: USER\npath.txt\n2022/8/13上午09:30\n6\n11111\n7\n8\nx=20\n9\ny=30\n10\n11\n#\n四個空白=>tab\nHelpVariable ExplorerPlotsFiles\n北\n口\nConsole 1/Ax\n12\nif\nx>y:\n50\n13\nprint(x-y)\ndone!\n14\nprint('x>y')\nIn [12]: runfile('C:/Users/USER/Desktop/Python/\n15\nelse:\nchapterl(Python技術及開發環境介绍）/sourcecode/\n16\nprint(x+y)\nch1_test3.py', wdir='C:/Users/USER/Desktop/Python/\n17\nprint(\nx<=y\nchapterl（Python技術及開發環境介绍）/sourcecode'）\n50\n18\nx<=y\n19\nprint('done!')\ndone!\n20\nIn [13]:\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12)\nLine\n2022-08-1313:11:38\n44%\n营\n36℃℃晴\n2022/8/13",
+    "keywords": [
+      "2022",
+      "python",
+      "print",
+      "python技術及開發環境介绍",
+      "sourcecode"
+    ],
+    "blip_caption": "screenshot of a computer screen displaying a program with a number of numbers on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 1200.0,
+    "end": 1800.0,
+    "timestamp": 1200.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n个\n口\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nC:UserslUSERDesktopPythonchapter1(Python技及環境介绍）)ouwcecodechl_est.py\n日\nR\nQ\nC\n口\nch1_testl.py x\nch1_1.py ×ch1_test2.py x\nch1_test3.py*x\nNar Type Size\nValue\nx\nint 1\n20\n1\n#\n_*_\ncoding: utf-8\n_*\nint 1\n30\n2\n 1 \ny\n3\nCreated on Sat Aug\ng 13 12:02:53 2022\n4\n5\n@author: USER\n6\n7\n8\n#商品價格\n9\nx=20\n10\n#\n商品數量\nHelpVariable ExplorerPlotsFiles\n11\ny=30\n口\nConsole 2/A x\n12\nx<=y\n20 30 done!\n13\n14\n四個空白=>tab\nIn [9]: runfile('C:/Users/USER/Desktop/Python/\n15\n输出x-y\nchapterl(Python技術及開發環境介绍）/sourcecode/\nch1_test3.py', wdir='C:/Users/USER/Desktop/Python/\n16\n印出結果\nchapterl(Python技術及開發環境介绍）/sourcecode'）\n17\n50\n18\n#比较大小\nx<=y\n19\n20 30done!\nif\nx>y:\n20\n#输出相减结果\nIn [10]:\nnrint(x-v)\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12)\nLi\n5,Col13UTF-8\nCRLE\n2022-08-1313:21:38\nRW\n44%\n0\n营\nn\n日\n36°℃晴\n2022/8/13",
+    "keywords": [
+      "python",
+      "python技術及開發環境介绍",
+      "sourcecode",
+      "2022",
+      "user"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of languages on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 1800.0,
+    "end": 2400.0,
+    "timestamp": 1800.0,
+    "text": "chapter2_資料型熊與數\n5 / 45| —110%+|\npython\n靜態/動態型别?\nPython寫法\nint)\ncoffeePrice=45:\ncoffeePrice=45\n整數型態\n變數名\n透過=赋予價格（值）\n1.一般程式語言(C/Java)编時都會查型態，於靜態型别(強型\n别)也就是要定義清楚才能使用。\n2.Python是於動態型别，會按造給予的值來自動判型别(先看值\n是甚才决定型别)\n2022-08-1313:31:38",
+    "keywords": [
+      "coffeeprice",
+      "chapter2_資料型熊與數",
+      "python",
+      "動態型别",
+      "python寫法"
+    ],
+    "blip_caption": "screenshot of a computer screen with a picture of a computer screen with a picture of a computer screen",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 2400.0,
+    "end": 3000.0,
+    "timestamp": 2400.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n心司日司\nC:UsersUSERDesktopiPythonchapter1(Python技術及發環境介绍）sourcecode\n日\nR\nQ\nC\n口\nch1_testl.py xch1_1.py xch1_test2.py xch1_test3.py x\nuntiled2.py* ×\nNarTypeSize\nValue\n#float(浮點數)\nint 1\n10\n10\nint 1\n5\n11\nx=10.0\n12\n# str(字串)\n13\nX=\"10\"\n14\n#bool（布林變數True/False)\n15\nX=True\n16\n17\nprint(x,type(x))\n18\nHelpVariable ExplorerPlotsFiles\n19\nx=10\n口\nConsole 2/A ×\n20\nFalse\ny=5\n10 <class\n'int'>\n21\n22\nprint(x<y)\nIn [17]: runfile('C:/Users/USER/Desktop/Python/\n23\nif x<y:\nchapterl(Python技術及開發環境介绍)/sourcecode/\nuntitled2.py', wdir='C:/Users/USER/Desktop/Python/\n24\nprint('x>y'\nchapterl（Python技術及開發環境介绍）/sourcecode'）\n25\nelse:\nFalse\n26\nprint('x<y'\nx<y\n10<class 'int'>\n27\n28\nIn [18]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base Python 3.9.12)\nLin\n2022-08-1313:41:38\nO\n营\nn\n1\n36℃多雲\n物英\n2022/8/13",
+    "keywords": [
+      "python",
+      "print",
+      "sourcecode",
+      "false",
+      "class"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 3000.0,
+    "end": 3600.0,
+    "timestamp": 3000.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n心凹司日司\n7\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nCNUsersUSERDesktoplPythonchapter(Python技及開環境介绍)souwcecodeluntied3.y\nR\n南\nQ\nC\nch1_testl.py xch1_1.py xch1_test2.py ×ch1_test3.py ×ch1_test4.py x\nuntiled3.py* x\nNarTypeSize\nValue\nint 1\n10\n1\n#\n-*-\ncoding: utf-8\n3-*_\ny\nint 1\n5\n2\n1 11 1\n3\nCreated0n Sat Aug13 13:49:32 2022\n4\n5\n@author: USER\n6\n1I 11 11\n7\n8\n 11 1I\n9\n123\n10\nABC\n11\nHelpVariable ExplorerPlotsFiles\nabc\n12\n1 1\n口\nConsole 2/A x\n13\n#\n一般寫法\nFalse\n14\nprint('123')\nx>y\n15\nprint('ABC')\nIn [20]: runfile('C:/Users/USER/Desktop/Python/\n16\nprint('abc')\nchapterl(Python技術及發環境介绍）/sourcecode/\n17\n#跳脱字元\\n=>换行\nuntitled3.py', wdir='C:/Users/USER/Desktop/Python/\n18\nchapterl（Python技術及開發環境介绍）/sourcecode'）\n19\n123\nABC\nabc\nIn [21]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)\nLine\n17, Col14UTF-8\n2022-08-1313:51:38\n45%\n1\n36℃多雲\n9中\n2022/8/13",
+    "keywords": [
+      "python",
+      "sourcecode",
+      "2022",
+      "user",
+      "print"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 3600.0,
+    "end": 4200.0,
+    "timestamp": 3600.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\nK\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nCUsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）sourcecodeluntild3.py\n日\nR\nQ\nC\n口\nch1_testl.py ×\nch1_1.py ×ch1_test2.py ×ch1_test3.py ×ch1_test4.py ×\ntuntiled3.py*x\nNarTypeSize\nValue\nX\nint 1\n10\n8\n1111 11\ny\nint 1\n5\n9\n123\n10\nABC\n11\nabc\n12\n 1\n13\n#\n一般寫法\n14\nprint('123')\n15\nprint('ABC')\n16\nprint('abc')\nHelpVariable ExplorerPlotsFiles\n17\nprint('-\n口\nConsole 2/Ax\n18\n#跳脱字元\\n=>换行\n19\n123\nprint('123\\nABC\\nabc')\nABC\n20\nprint('\nabc\n21\n#\\t=>tab键(四個空白)\n123\n22\nprint('jerry\\t178.0\\t65.8')\nABC\n23\nprint('mary\\t68.5\\t55')\nabc\n24\njerry\n178.0\n65.8\n25\nmary\n68.5\n55\n26\nIn [33]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)\nLi\nne 24, Col1UTF-8\n45%\n2022-08-1314:01:38\nO\n营\n日\n36℃多雲\n物英\n2022/8/13",
+    "keywords": [
+      "print",
+      "python",
+      "python技術及開發環境介绍",
+      "nabc",
+      "jerry"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of numbers on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 4200.0,
+    "end": 4800.0,
+    "timestamp": 4200.0,
+    "text": "Spyder(Python 3.9)\nFil Edit Search Source Run Debug Consoles Projects Iools View Help\n7\nC:UsersUSERDesktopiPythonchapter1(Python技術及開發環境介绍)sourcecode\nCUsersUSERDesktopPythonhaperlPyhon技及境介绍owcecdelnedy\n日\nR\nQ\n口\nch1_testl.py xch1_1.py xch1_test2.py ×ch1_test3.py xch1_test4.py x\nuntiled.3.py*x\nNarTypeSize\nValue\n+\nint 1\n10\n14\nprint('123')\nint 1\n5\n15\nprint('ABC')\n16\nprint('abc')\n17\nprint('\n18\n#跳脱字元\\n=>换行\n19\nprint('123\\nABC\\nabc')\n20\nprint('\n21\n#\n\\t=>tab键(四個空白)\n22\nprint('jerry\\t178.0\\t65.8')\nHelpVariable ExplorerPlotsFiles\n23\nprint('mary\\t168.5\\t55')\n口\nConsole 2/Ax\n24\nADL\nabc\n25\n#一'+一\"\n26\n#123\"ABC\"abc\n123\nABC\n27\nprint('123\\\"ABC\\\"abc')\nabc\n28\n#123\\ABC\\abc\njerry\n178.0\n65.8\n29\nprint('123\\\\ABC\\\\abc')\nmary\n168.5\n55\n30\n123\"ABC\"abc\n123\\ABC\\abc\n31\n32\nIn [48]:\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12)\nLi\n2022-08-1314:11:38\n营\nn\n日\n36°℃多雲\n2022/8/13",
+    "keywords": [
+      "print",
+      "python",
+      "nabc",
+      "jerry",
+      "mary"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of numbers on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 4800.0,
+    "end": 5400.0,
+    "timestamp": 4800.0,
+    "text": "Spyder(Python 3.9)\n口\nSave fle\n《chapter1(Python技衔及.》sourcecode\n搜寻sourcecode\nUsersiUSERDesktopiPythonchapter1(Python技術及開發環境介绍）)soucecode\n个\n组合管理\n新增資料爽\n?\n日\n前\nQ\nC\nNarTypeSize\n名\n類型\nValue\n修改日期\n快速存取\nint 1\n10\n ch1_1.py\n2022/8/13上午09:30\nPY相案\n桌面\n ch1_test1.py\n2022/8/13上午11:50\nPY福案\ny\nint1\n5\n ch1_test2.py\n2022/8/13 下午 12:01\nPY福案\n文件\nch1_test3.py\n2022/8/13下午01:33\nPY福案\n ch1_test4.py\n2022/8/13下午01:49\nPY福案\n本機\npath.txt\n2022/8/13上午09:30\n文字文件\nOneDrive\n本機\n網路\n福案名(N):\nuntitled3.py\n存相型:Supported textfles(*py*R*j*ipynb;*md;*pyw*pyx*c;*cpp;*json;*.dat;*csv*tsv*t;*in;*h \nHelpVariable ExplorerPlotsFiles\n阳藏資料夹\n存福（S）\n取消\n口\nConsole 2/A ×\n26\n#123\"ABC\"abc\nabc\n27\nprint('123\\\"ABC\\\"abc')\n28\n#123\\ABC\\abc\njerry\n178.0\n65.8\n29\nprint('123\\\\ABC\\\\abc')\nmary\n168.5\n55\n30\n123\"ABC\"abc\n31\n#字串趣長？使用\n123\\ABC\\abc\n32\nprint('261\n賀知章\\n回鄉偶書\n\\\"(久客還鄉)\"\\t少小離家老大回\\\n261贺知章\n33\n鄉音無改餐毛催(衰)\n兒童相見不相識\n笑問「客徙何處來」‘)\n回鄉偶書\n\"(久客還鄉）”少小離家老大回鄉音\n34\n無改餐毛催(衰)\n兒童相見不相識笑間「客从何處\n35\n來」\n36\n37\nIn [55]:\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12) Line\n 31, Col10UTF-8\n43%\n2022-08-1314:21:38\nO\n营\n4\n34°℃多雲\n物英\n2022/8/13",
+    "keywords": [
+      "2022",
+      "py福案",
+      "python",
+      "print",
+      "13上午09"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of items on it",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 5400.0,
+    "end": 6000.0,
+    "timestamp": 5400.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n个心司日\n■\nC:UsersUSERDesktopiPythonchapter1(Python技術及發環境介绍)sourcecode\n广\nCUsersUSERDesktopiPythonchapter1(Python技術及開發環境介绍）sourcecodevch1_est5.py\n日\nR\n前\nC\n口\nch1_testl.py ×ch1_1.py ×ch1_test2.py ×ch1_test3.py ×ch1_test4.py ×\nch1_test5.py* x\nNarTypeSize\nValue\nint 1\n10\n15\nprint('ABC')\n16\nprint('abc')\nint 1\n17\nprint('\n18\n#跳脱字元\\n=>换行\n19\nprint('123\\nABC\\nabc'\n20\nprint('-\n21\n#\\t=>tab键(四個空白)\n22\nprint('jerry\\t178.0\\t65.8')\n23\nprint('mary\\t168.5\\t55')\n24\n25\n#1'+一\"\n26\n#123\"ABC\"abc\nHelpVariable ExplorerPlotsFiles\n27\nprint('123\\\"ABC\\\"abc')\n28\n#123\\ABC\\abc\n口\nConsole 2/A ×\n29\nprint('123\\\\ABC\\\\abc')\nabc\n30\n31\n#字串通長？使用\njerry\n178.0\n65.8\n32\nprint('261\n賀知章\\n回鄉偶書\n\\\"（久客還鄉）\\\"\\t少小離家老大回\\\nmary\n168.5\n55\n33\n鄉音無改毛催(衰)\n兒童相見不相識\n笑問「客徙何處來」‘)\n123\"ABC\"abc\n34\n123\\ABC\\abc\n35\nX\n261贺知章\n36\n回鄉偶書\n\"(久客還鄉）”少小離家老大回鄉音\n37\nprint（'261\n賀知章\\n回鄉偶書\n\\\"（久客還鄉）\"\\t少小離家老大回\\\n無改餐毛催(衰)\n兒童相見不相識笑問「客徙何處\n38\n鄉音無改毛催（衰）\n兒童相見不相識\n笑間「客徙何處來」‘)\n來」\n39\n40\nIn [55]:\n41\nIPython consoleHistory\n<LSP Python ready\n conda: base (Python 3.9.12) Line 35, Col2\n2022-08-13 14:31:38\nRW\n45%\nO\n营\n日\n34℃多雲\n2022/8/13",
+    "keywords": [
+      "print",
+      "python",
+      "久客還鄉",
+      "nabc",
+      "jerry"
+    ],
+    "blip_caption": "screenshot of a computer screen with a number of different languages on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 6000.0,
+    "end": 6600.0,
+    "timestamp": 6000.0,
+    "text": "Spyder(Python 3.9)\nFil Edit Search Source Run Debug Consoles Projects Iools View Help\n心口可日司\n个\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nCUserslUSERDesktopPythonchapterl(Pyhon技及環境介绍）)owceodeluntled4.y\n日\n口\nch1_testl.py x\nch1_1.py ×ch1_test2.py ×ch1_test3.py ×ch1_test4.py x\nch1_test5.py x\nuntiled4.py*x\nNarTypeSize\nValue\nx\nint 1\n10\n1\n#\n-*_\ncoding: utf-8\n-*_\nX\nint 1\n20\n2\n11 11 1\nint 1\n10\n3\nCreated on Sat Aug 13 14:36:27 2022\n4\n5\n@author: USER\n6\n11 11 1\n7\n8\nx=90\n#1 X\n9\ncoffee=90\n#20.5X\nHelpVariable ExplorerPlotsFiles\n10\ncoffeePrice=90\n#31\n口\nConsole 2/A ×\n11\ncoffee_price=90 #4\n書261贺知章回鄉偶書261賀知章回鄉偶書\nIn[62]: runfile('C:/Users/USER/Desktop/\nPython/chapter1(Python技術及開發環境介绍）/\nsourcecode/untitled4.py', wdir='C:/\nUsers/USER/Desktop/Python/\nchapterl(Python技術及開發環境介绍)/\nsourcecode')\n1020\nIn [63]:\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12)Line\n 10,Co121\n44%\n2022-08-1314:41:38\nO\n营\n34℃多雲\n2022/8/13",
+    "keywords": [
+      "python",
+      "python技術及開發環境介绍",
+      "sourcecode",
+      "2022",
+      "user"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a code on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 6600.0,
+    "end": 7200.0,
+    "timestamp": 6600.0,
+    "text": "Spyder(Python 3.9)\nFil Edit Search Source Run Debug Consoles Projects Iools View Help\nT\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nC:UsersUSERWesktopPythonchapter1(Python技術及開發環境介绍）soucecodeluntiled5.py\n日\nR\nQ\nC\n口\nch1_testl.py ×ch1_1.py ×ch1_test2.py ×ch1_test3.py ×ch1_test4.py ×ch1_test5.py ×\nch1l_testf.py x\nuntitled5.py*x\nNarTypeSize\nValue\nx\nint 1\n10\n13\nprint(x+y)\nint 1\n20\n14\nprint(x-y)\ny\nint\n1\n5\n15\nprint(x*y)\nint 1\n10\n16\n#除法必定為浮點數\n17\nprint(x/y)\n18\nprint(x**y)\n19\n#整數除法\n20\nprint(x//y)\n21\n#餘數\n22\nHelpVariable ExplorerPlotsFiles\nprint(x%y)\n23\n口\nConsole 2/A ×\n24\nz=10\nchapterl(Python技術及開發環境介绍）/\n25\n#\nsourcecode')\nprint(z%2==0)\n15\n26\n5\n27\nif\nz%2==0:\n50\n28\nprint(z，'是偶數'）\n2.0\n29\nelse:\n100000\n2\n30\nprint(z，\"不是偶數\")\n0\n31\n10是偶數\n32\nIn [74]:\n33\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)Line 25,Col4UTF-8\n45%\n2022-08-1314:51:38\nO\n营\n日\n34℃多雲\n2022/8/13",
+    "keywords": [
+      "print",
+      "python",
+      "python技術及開發環境介绍",
+      "sourcecode",
+      "2022"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of languages on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 7200.0,
+    "end": 7800.0,
+    "timestamp": 7200.0,
+    "text": "Spyder(Python 3.9)\n m o  so   o   \n=？\n个\n一\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）)sourcecode\nCUsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）soucecodeluntild5.py\n日\n前\nQ\nC\n口\nch1_testl.py xch1_1.py ×ch1_test2.py ×ch1_test3.py xch1_test4.py ×ch1_test5.py x\nchl_testf.py x\nuntitled5.py*×\nNarTypeSize\nValue\nint\n1\n10\n10\nx=10\nX\nint\n1\n20\n11\ny=5\n12\nint\n1\n5\n13\nprint(x+y)\nint 1\n11\n14\nprint(x-y)\n15\nprint(x*y)\n16\n#除法必定為浮點數\n17\nprint(x/y)\n18\nprint(x**y)\n19\n#整数除法\nHelpVariable ExplorerPlotsFiles\n20\nprint(x/ /y)\n21\n#\n求餘數\n口\nConsole 2/A ×\n22\nprint(x%y)\nsourcecode')\n23\n15\n24\n5\nz=11\n50\n25\n# True lor False?\n2.0\n26\nprint(z%2==0)\n100000\n27\n2\n28\nif:\nz%2==0:\n0\nFalse\n29\nprint(z，'是偶数')\n11不是偶數\n30\nelse:\n31\nprint(z，\"不是偶数\")\nIn [76]:\nIPython consoleHistory\nLSP Python: ready\n conda: base (Python 3.9.12) Line\n43%\n2022-08-1315:01:38\n营\nn\n日\n33°℃多雲\n2022/8/13",
+    "keywords": [
+      "print",
+      "python",
+      "python技術及開發環境介绍",
+      "sourcecode",
+      "false"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 7800.0,
+    "end": 8400.0,
+    "timestamp": 7800.0,
+    "text": "Spyder(Python 3.9)\n个心司日\nK\n一\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）bourcecodeluniled6.py\n日\n前\nQ\nC\n口\nch1_testl.py ×ch1_test2.py x\nch1_test3.py x\nch1_test4.py ×ch1_test5.py xch1_testf.py ×\nch1_testf7.pyx\nuntiled6.y* ×\nNarTypeSize\nValue\nint\n1\n10\n1\n#\n-*_\ncoding: utf-8\n-*_\nX\nint\n1\n20\n2\n1111 11\nint\n1\n5\n3\nCreated on Sat Aug 13 15:06:40 2022\nint\n1\n11\n4\n5\n@author: USER\n6\n11 11 11\n7\n8\n11 11 1I\n9\n果？元，一箱總計為？元。\nHelpVariable ExplorerPlotsFiles\n10\n口\nConsole 2/A ×\n11\nsourcecode')\n15\n5\n50\n2.0\n100000\n2\n0\nFalse\n11不是偶數\nIn [76]:\nIPython consoleHistory\n<LSP Python: ready\n2022-08-1315:11:38\nRW\n45%\nO\nO\n营\n33°℃多雲\n2022/8/13",
+    "keywords": [
+      "2022",
+      "python",
+      "usersuserdesktoppythonchapter1",
+      "python技術及開發環境介绍",
+      "sourcecode"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of items on it",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 8400.0,
+    "end": 9000.0,
+    "timestamp": 8400.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n个心司日\n一\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）sourcecode\n广\nCUsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）sourcecodeluntild6.py\n日\nR\n前\nC\nch1_test.py ×ch1_test2.py ×ch1_test3.py ×ch1_test4.py xch1_test5.py ×ch1_test6.py ×\nch1l_test7.py ×\nuntiled6.py* x\nName\nTypeSize\nValue\napple_price\nint\n1\n15\n1\n#-*-(\ncoding: utf-8 -*-\nbox\nint\n1\n24\n2\n11 11I\ntotal\nint\n1\n360\n3\nCreated on Sat Aug 13 15:06:40 2022\n4\nX\nint\n1\n10\n5\nX\n@author: USER\nint\n1\n20\n6\n11 11 I\ny\nint\n1\n5\n7\nint 1\n11\n8\n111\n9\n果？元，一箱總計為？元。\n10\n11\n1 11 11\nHelpVariable ExplorerPlotsFiles\n12\napple_price=15\n口\nConsole 2/A ×\n13\nbox=24\n14\ntotal=apple_price*box\nIn [85]: runfile('C:/Users/USER/Desktop/\n15\nPython/chapterl(Python技術及開發環境介绍）/\n16\n#轉型+格式化输出\nsourcecode/untitled6.py', wdir='C:/\n17\n#In\nUsers/USER/Desktop/Python/\n18\nprint('-\n-果',apple_price，'元’一箱總計為',total，'元'\nchapterl(Python技術及開發環境介绍）/\n19\nsep='',end='\\nI)\nsourcecode')\n20\nprint('謝謝光!'）\n-颗果15元，一箱總計爲360元\n21\n謝谢光臨！\n22\nIn [86]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)Line\nRW\n45%\n2022-08-1315:21:38\nO\n营\n33℃多雲\nP物英\n2022/8/13",
+    "keywords": [
+      "python",
+      "python技術及開發環境介绍",
+      "apple_price",
+      "sourcecode",
+      "total"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 9000.0,
+    "end": 9600.0,
+    "timestamp": 9000.0,
+    "text": "Spyder(Python 3.9)\nFile Edit Search Source Run Debug Consoles Projects Iools View Help\n个心司日\n■\n一\nC:UsersUSERDesktopiPythonchapter1(Python技術及發環境介绍)sourcecode\nK\"\n广\nCUsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）)sourcecodevch1_test.py\n日\nR\n前\nC\n口\nch1_testl.py x\nch1_test2.py ×ch_test3:py ×ch_test4.py xch_test5py ×ch_es.py xchfest7.y x\nchl_teste.py* x\nName\nTypeSize\nValue\napple_price\nint\n1\n15\n7\nbox\nint\n1\n24\n8\n11 11 1I\n9\ntotal\nint \n1\n360\n果？元，一箱計為？元。\n★\n10\nint\n1\n10\n11\nI1 1\nX\nint\n1\n20\n12\napple_price=15\ny\nint\n1\n5\n13\nbox=24\nZ\nint 1\n11\n14\ntotal=apple_price*box\n15\n16\n#\n轉型+格式化输出\n17\n#预設sep='\n',end='\\n\nHelpVariable ExplorerPlotsFiles\n18\nprint('—\n果'，apple_price，'元，一箱總計為'，total，'元'\n口\nConsole 2/A ×\n19\nsep='',end='\\n')\n20\nIn[95]: runfile('C:/Users/USER/Desktop/\n21\nPython/chapterl（Python技術及開發環境介绍）/\n22\nsourcecode/ch1_test8.py', wdir='C:/\n23\n#轉型字串(apple_price,total)\nUsers/USER/Desktop/Python/\n24\nchapterl(Python技術及開發環境介绍）/\n25\nsourcecode')\n26\n一颗巅果15元，一箱總計爲360元\n27\n#轉型数值\n謝光!\n28\nprint('謝谢光!')\nIn [96]:\n29\nIPython consoleHistory\n<LSP Python:ready\n conda: base (Python 3.9.12)  Line 21, Col1UTF-8\nRW\n46%\n2022-08-1315:31:38\nO\n营\n日\n4\n2\n2317收益\n2022/8/13",
+    "keywords": [
+      "python",
+      "apple_price",
+      "total",
+      "sourcecode",
+      "python技術及開發環境介绍"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a number of words on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 9600.0,
+    "end": 10200.0,
+    "timestamp": 9600.0,
+    "text": "Spyder(Python 3.9)\n m soI so slo nea ung anos e  ai\n心凹口可日\n个\n白\n一\nC:UsersUSERDesktopiPythonchapter1(Python技術及開發環境介绍)ourcecode\nCUserslUSERDesktopPythonchapterl(Pyhon技及環境介绍）owceodeluntedi7y\n日\nP\n口\n口\nch1_testl.py xch1_test2.py xch1_test3.py ×ch1_test4.py ×ch1_test5.py ×ch1_test6.py ×ch1_test7.py ×\nch1_testB.py x\nuntiled7.y*x\nNar[ypeSize\nValue\n3\nCreated on Sat Aug 13 15:39:00 2022\n4\n5\n@author: USER\n6\n 11 1I\n7\n8\n1 11 11\n9\n型態轉型\n10\nstr()\n轉成字串\n11\nint(),float()\n－轉成数值\n12\n 111I\nHelpVariable ExplorerPlotsFiles\n13\n口\nConsole 2/A ×\n14\nx=10\n15\ny=20l\nchapter1(Python技術及開發環境介绍）/\n16\nsourcecode'\n17\n# x=10\nx=10\n18\nprint('x=',x, sep='')\nx=10\n19\nIn [101]:\n20\n# str\n21\nprint('x='+str(x))\nRemoving all variables..\n22\n23\n24\nIn [101]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)\nLie 15,Col5UTF-8\nCRLE\n45%\n2022-08-1315:41:38\nQ\n营\n日\n2\n32℃多雲\n物英\n2022/8/13",
+    "keywords": [
+      "python",
+      "2022",
+      "python技術及開發環境介绍",
+      "print",
+      "spyder"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "python技術及開發環境介绍"
+    ]
+  },
+  {
+    "start": 10200.0,
+    "end": 10800.0,
+    "timestamp": 10200.0,
+    "text": "Spyder (Python 3.9)\n口\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nK\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍）sourcecodelchl_est9.py\n日\nR\nC\n口\nch1_testl.py ×\nch1_test2.py ×ch1_test3.py ×ch1_test4.py xch1_test5.py xch1_test6.py ×\nc_test7py x\nchl_teste.py ×\nch1test9.pyx\nName\nType\nSize\nValue\ntotal\nfloat\n1\n30.5\n13\nstr\n4\n10.0\n14\nx=10\n15\ny=20\nfloat 1\n20.5\n16\ntotal=x+y\n17\n# x=10\n18\nprint('x=',x,sep=')\n19\n20\n# str\n21\nprint('x='+str(x))\n22\nprint('總合為='+str(total))\n23\nHelpVariable ExplorerPlotsFiles\nprint(x+y)\n24\n口\nConsole 2/A ×\n25\n# int(),float()\n－轉成數值\nchl_test9.py', wdir='C:/Users/\n26\nx='10.0'\nUSER/Desktop/Python/\n27\ny=20.5\nchapterl（Python技術及開發環境介绍）/\n28\nsourcecode')\n29\n# 10.0+20.5\nx=10\n30\ntotal=float(x)+y\nx=10\n31\nprint('總合為='+str(total))\n總合為=30\n30\n32\n總合為=30.5\n33\n34\nIn [113]:\n35\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)\nLine\n31,Co125UTF-8\nCRLE\nRW\n45%\n2022-08-1315:51:38\n营\n日\n32℃多雲\n2022/8/13",
+    "keywords": [
+      "total",
+      "print",
+      "python",
+      "float",
+      "python技術及開發環境介绍"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  },
+  {
+    "start": 10800.0,
+    "end": 11302.96,
+    "timestamp": 10800.0,
+    "text": "Spyder(Python 3.9)\n心凹可日\n口\nC:UsersUSERDesktopPythonchapter1(Python技術及開發環境介绍)sourcecode\nCUsersUSERDesktopPythonhaer1Pyhon技及環境介绍oucedechesty\n日\nP\npy ×ches.y xchtes3,py ×chest,y ×ches5,y ×chesh.y ×ch_es.py xches.y ×ch_es,y x\nch1_test10.py x\nNar \nType\nSize\nValue\nstr\n2\n10\n7\nfloat 1\ny\n20.5\n8\nx=10\n9\ny=20\n10\n11\n# 10=>10.0+20=>30.0\n12\nprint(float(x)+y)\n#30.0\n13\n14\nx=10\n15\ny=\"20.5\"\nHelpVariable ExplorerPlotsFiles\n16\n17\n# 10+20.5==>30.5\n口\nConsole 2/A x\n18\nprint(x+float(y))\n#30.5\nDesktop/Python/chapterl(Python技術\n19\n及開發環境介绍）/sourcecode/\n20\nx=\"10\"\nch1_test10.py', wdir='C:/Users/\ny=20.5\nUSER/Desktop/Python/\n21\nchapterl(Python技術及開發環境介绍）/\n22\n#數值互轉\nsourcecode')\n23\n# 10+\n30.0\n30.5\n24\nprint(int(x)+int(y))\n30\n25\n26\nIn [116]:\nIPython consoleHistory\n<LSP Python: ready\n conda: base (Python 3.9.12)\nLine 21, Co17UTF-8\nCRLE\n2022-08-1316:01:38\n45%\nQ\n营\n日\n2\n32℃多雲\n2022/8/13",
+    "keywords": [
+      "python",
+      "sourcecode",
+      "float",
+      "print",
+      "python技術及開發環境介绍"
+    ],
+    "blip_caption": "there is a screenshot of a computer screen with a program on it",
+    "clip_topics": [
+      "sourcecode"
+    ]
+  }
+]

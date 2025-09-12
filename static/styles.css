@@ -1,0 +1,187 @@
+/* ==================== General Styling ==================== */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f4f8;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+/* Enlarged and Modernized Upload Container */
+.container {
+    max-width: 800px;
+    width: 90%;
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    animation: fadeIn 0.8s ease-in-out;
+}
+
+/* Titles */
+h1 {
+    color: #2c3e50;
+    font-size: 32px;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+h2 {
+    font-size: 20px;
+    font-weight: bold;
+    text-align: center;
+    color: #3498db;
+    margin-bottom: 20px;
+}
+
+/* ==================== Centering Form Elements ==================== */
+form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+/* ==================== Improved File Upload Styling ==================== */
+.custom-file-upload {
+    display: block;
+    background-color: #16a085;
+    color: white;
+    padding: 12px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    transition: background 0.3s ease-in-out, transform 0.2s;
+    width: 60%;
+    margin-bottom: 15px;
+}
+
+/* Hover Effect */
+.custom-file-upload:hover {
+    background-color: #1abc9c;
+    transform: scale(1.05);
+}
+
+/* Hide Default File Input */
+input[type="file"] {
+    display: none;
+}
+
+/* ==================== Centered Dropdowns Styling ==================== */
+.selection-container {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    margin-bottom: 15px;
+}
+
+.selection-group {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.selection-group label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.selection-group select {
+    width: 30%;
+    padding: 8px;
+    font-size: 16px;
+    border: 2px solid #16a085;
+    border-radius: 5px;
+    background: white;
+    cursor: pointer;
+    transition: border 0.3s ease-in-out;
+}
+
+/* Dropdown Hover & Focus */
+.selection-group select:hover,
+.selection-group select:focus {
+    border-color: #1abc9c;
+}
+
+/* ==================== Submit Button ==================== */
+button {
+    background-color: #2980b9;
+    color: white;
+    padding: 14px 20px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    border-radius: 8px;
+    width: 60%;
+    margin-top: 10px;
+    transition: background 0.3s ease-in-out, transform 0.2s;
+}
+
+button:hover {
+    background-color: #1f6692;
+    transform: scale(1.05);
+}
+
+/* ==================== Loading Animation (Spinner) ==================== */
+.spinner-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ==================== Results Page Styling ==================== */
+.result-container {
+    max-width: 900px;
+    width: 90%;
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    animation: fadeIn 0.8s ease-in-out;
+}
+
+.back-home {
+    display: block;
+    margin-top: 20px;
+    color: #16a085;
+    font-weight: bold;
+    text-decoration: none;
+    transition: color 0.3s;
+    font-size: 18px;
+}
+
+.back-home:hover {
+    color: #1abc9c;
+}
+
+/* Fade In Animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

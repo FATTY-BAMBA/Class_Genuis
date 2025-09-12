@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Class Genius - Upload</title>
+  <!-- Use url_for to load the CSS from the static folder -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Class Genius Video Processor</h1>
+    <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+      <!-- Custom file upload -->
+      <label class="custom-file-upload">
+        <input type="file" name="file" id="file-input">
+        Choose video file
+      </label>
+      <input type="text" name="video_url" placeholder="Or enter video URL">
+      <div class="selection-container">
+        <div class="selection-group">
+          <label for="num_pages">Number of Lecture Notes Pages:</label>
+          <select name="num_pages" id="num_pages">
+            <option value="3">3</option>
+            <option value="5">5</option>
+            <option value="7">7</option>
+          </select>
+        </div>
+        <div class="selection-group">
+          <label for="num_questions">Number of Q&A Questions:</label>
+          <select name="num_questions" id="num_questions">
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit">Upload and Process</button>
+    </form>
+  </div>
+  
+  <!-- Link to scripts.js using url_for -->
+  <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

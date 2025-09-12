@@ -1,0 +1,80 @@
+# ==================== CORE FRAMEWORKS ====================
+Flask==2.3.3
+gunicorn==23.0.0
+python-dotenv==1.0.1
+requests==2.32.3
+pycairo>=1.24.0,<1.29
+
+# ==================== AI/NLP ====================
+openai==1.55.3
+faster-whisper>=1.0.0,<1.2
+ctranslate2>=4.0,<5
+# Hugging Face ecosystem - using ranges for compatibility
+transformers>=4.45,<4.57
+tokenizers>=0.22.0,<0.24
+sentencepiece>=0.2.0,<0.3
+torchmetrics>=1.4.0
+lightning>=2.4.0
+# Remove llama-cookbook and install its components directly
+peft>=0.17.1
+optimum>=1.21.0
+sentence-transformers>=2.7.0
+evaluate>=0.4.1
+gradio>=4.29.0
+loralib>=0.1.2
+hdbscan==0.8.33
+cython==0.29.36
+google-generativeai==0.8.3
+hf_transfer>=0.1.5
+
+# ==================== VISION / OCR ====================
+opencv-python-headless==4.7.0.72
+pillow==9.5.0
+easyocr==1.7.1
+# PaddleOCR installed in the Dockerfile with --no-deps
+
+# PaddleOCR runtime deps
+attrdict==2.0.1
+beautifulsoup4==4.13.4
+fire==0.7.1
+fonttools==4.59.1
+imgaug==0.4.0
+lanms-neo==1.0.2
+lmdb==1.7.3
+openpyxl==3.1.5
+pdf2docx==0.5.8
+premailer==3.10.0
+PyMuPDF>=1.20,<1.23
+rapidfuzz==3.13.0
+visualdl==2.5.3
+
+# ==================== UTILITIES ====================
+numpy==1.24.4
+protobuf<4
+llvmlite==0.43.0
+numba==0.60.0
+tqdm==4.67.1
+scipy==1.10.1
+scikit-learn==1.0.2
+scikit-image==0.21.0
+python-docx==1.2.0
+openai-whisper==20231117
+onnxruntime==1.19.2
+wandb>=0.18.0
+rich>=13.9.0
+tabulate>=0.9.0
+rouge-score==0.1.2
+
+# ==================== CELERY ====================
+redis==6.0.0
+celery==5.5.2
+billiard==4.2.1
+vine==5.1.0
+
+# ==================== MEDIA PROCESSING ====================
+ffmpeg-python==0.2.0
+pydub==0.25.1
+
+# ==================== TIMEZONE ====================
+pytz==2023.3.post1
+tzlocal==4.3

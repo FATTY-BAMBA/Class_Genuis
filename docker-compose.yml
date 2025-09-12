@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: class_genius_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    container_name: class_genius_web
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    deploy: {}  # optional; avoids Docker Compose warning
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    runtime: nvidia  # <-- ADD THIS LINE for GPU support
+
+  worker:
+    build: .
+    container_name: class_genius_worker
+    restart: always
+    command: >
+      bash -c "celery -A tasks.tasks:celery worker --loglevel=info --concurrency=1"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    runtime: nvidia  # <-- ADD THIS LINE for GPU support

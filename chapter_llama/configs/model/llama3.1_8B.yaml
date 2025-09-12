@@ -1,0 +1,37 @@
+model_name: Meta-Llama-3.1-8B-Instruct
+
+trainer:
+  _target_: src.models.llama_finetune.Trainer
+
+config_train:
+  enable_fsdp: True 
+  quantization: Null # None, 8bit, 4bit
+  # model_name: ${paths.checkpoints_dir}/meta-llama/${model.model_name}/ # Use this if you want to use the model from the local directory
+  model_name: meta-llama/${model.model_name}
+  num_epochs: 1 
+  run_validation: False 
+  use_peft: True
+  peft_method: lora
+  r: 8 # lora rank
+  save_model: True
+  dist_checkpoint_root_folder: model_checkpoints 
+  dist_checkpoint_folder: fine-tuned 
+  fsdp_config.pure_bf16: True
+  output_dir: ${paths.output_dir}/model_checkpoints/
+  batching_strategy: padding 
+  batch_size_training: 1 
+  context_length: 16384
+  lr: 1e-4
+  save_metrics: True 
+  use_wandb: ${use_wandb}
+  seed: ${seed}
+
+config_inference:
+  _target_: src.models.llama_inference.LlamaInference
+  ckpt_path: ${model.config_train.model_name}
+  quantization: ${model.config_train.quantization}
+  use_fast_kernels: True
+  peft_model: ${paths.output_dir}/model_checkpoints/
+
+subset: ${data.subset}
+model_flags: "default"
