@@ -19,7 +19,8 @@ RUN apt-get update && \
     nodejs build-essential cmake git wget curl \
     libcairo2-dev libjpeg-dev libgif-dev pkg-config \
     python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Upgrade pip in the global environment of this stable image
 RUN python -m pip install --upgrade pip setuptools wheel
@@ -36,13 +37,20 @@ RUN python -m pip install \
     "pybind11==2.12.0" \
     "meson==1.2.3" \
     "meson-python==0.15.0" \
-    "ninja==1.11.1"
+    "ninja==1.11.1" \
+    && pip cache purge
 
-# Install main application requirements (this will handle all version resolution)
-RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
+# Install main application requirements with cleanup
+RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip cache purge \
+    && rm -rf /tmp/* \
+    && rm -rf ~/.cache/pip \
+    && find /usr/local -name "*.pyc" -delete \
+    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
 # Install visualdl directly from PyPI
-RUN python -m pip install "visualdl==2.5.3"
+RUN python -m pip install "visualdl==2.5.3" \
+    && pip cache purge
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
 ARG BUILD_VARIANT=gpu
@@ -50,8 +58,19 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle-gpu==${PADDLE_VERSION_GPU}"; \
     else \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle==${PADDLE_VERSION_CPU}"; \
-    fi
-RUN python -m pip install "paddleocr==2.6.1"
+    fi \
+    && pip cache purge
+
+RUN python -m pip install "paddleocr==2.6.1" \
+    && pip cache purge \
+    && find /usr/local -name "*.pyc" -delete \
+    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
+
+# Final cleanup in builder stage
+RUN rm -rf /tmp/* \
+    && rm -rf ~/.cache \
+    && apt-get autoremove -y \
+    && apt-get autoclean
 
 # ---- Stage 2: The Final Image ----
 FROM python:3.10-slim AS final
@@ -78,16 +97,20 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     apt-get install -y --no-install-recommends \
     cuda-cudart-11-8 \
     libcudnn8=8.9.7.29-1+cuda11.8 \
-    && rm -rf /var/lib/apt/lists/*; \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean; \
     fi
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg redis-tools libsndfile1 libgl1 libgomp1 curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy the entire Python environment from the builder stage
+# Copy the entire Python environment from the builder stage with cleanup
 COPY --from=builder /usr/local/ /usr/local/
+RUN find /usr/local -name "*.pyc" -delete \
+    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
 # Copy application code only (no need to install anything)
 COPY . .
@@ -99,6 +122,7 @@ RUN printf '#!/bin/bash\nset -e\n./start_chapter_llama.sh &\nsleep 5\ncurl -sf h
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace && \
     chown -R appuser:appuser /app /workspace
+
 USER appuser
 
 EXPOSE 5000 8000
