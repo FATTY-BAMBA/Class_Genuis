@@ -17,14 +17,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Logs in to your Docker Hub account using the secrets you created
+      # 2. Free up disk space before building
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af
+          df -h
+
+      # 3. Logs in to your Docker Hub account using the secrets you created
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 3. Builds the GPU variant of your image and pushes it to Docker Hub
+      # 4. Builds the GPU variant of your image and pushes it to Docker Hub
       - name: Build and push GPU image
         uses: docker/build-push-action@v5
         with:
@@ -35,7 +45,11 @@ jobs:
           push: true
           tags: fattybamba/classgenius-pipeline:latest-gpu
 
-      # 4. Builds the CPU variant of your image and pushes it to Docker Hub
+      # 5. Clean up Docker before building CPU variant
+      - name: Clean up Docker
+        run: docker system prune -af
+
+      # 6. Builds the CPU variant of your image and pushes it to Docker Hub
       - name: Build and push CPU image
         uses: docker/build-push-action@v5
         with:
