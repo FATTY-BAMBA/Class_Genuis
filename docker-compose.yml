@@ -30,8 +30,6 @@ services:
       - ./segments:/app/segments
       - ./models:/app/models
       - ./workspace:/workspace
-    env_file:
-      - .env
     environment:
       - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
@@ -66,8 +64,6 @@ services:
       - ./segments:/app/segments
       - ./models:/app/models
       - ./workspace:/workspace
-    env_file:
-      - .env
     environment:
       - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
