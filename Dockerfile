@@ -37,20 +37,16 @@ RUN python -m pip install \
     "pybind11==2.12.0" \
     "meson==1.2.3" \
     "meson-python==0.15.0" \
-    "ninja==1.11.1" \
-    && pip cache purge
+    "ninja==1.11.1"
 
 # Install main application requirements with cleanup
 RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && pip cache purge \
     && rm -rf /tmp/* \
-    && rm -rf ~/.cache/pip \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
 # Install visualdl directly from PyPI
-RUN python -m pip install "visualdl==2.5.3" \
-    && pip cache purge
+RUN python -m pip install "visualdl==2.5.3"
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
 ARG BUILD_VARIANT=gpu
@@ -58,8 +54,7 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle-gpu==${PADDLE_VERSION_GPU}"; \
     else \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle==${PADDLE_VERSION_CPU}"; \
-    fi \
-    && pip cache purge
+    fi
 
 RUN python -m pip install "paddleocr==2.6.1" \
     && find /usr/local -name "*.pyc" -delete \
