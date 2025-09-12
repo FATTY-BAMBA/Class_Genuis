@@ -114,8 +114,6 @@ RUN find /usr/local -name "*.pyc" -delete \
 COPY . .
 
 RUN chmod +x /app/start.sh
-RUN printf '#!/bin/bash\nexec uvicorn chapter_llama.main:app --host 0.0.0.0 --port 8000 --log-level warning\n' > /app/start_chapter_llama.sh && chmod +x /app/start_chapter_llama.sh
-RUN printf '#!/bin/bash\nset -e\n./start_chapter_llama.sh &\nsleep 5\ncurl -sf http://localhost:8000/health || exit 1\nexec ./start.sh\n' > /app/start_supervisor.sh && chmod +x /app/start_supervisor.sh
 
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace && \
@@ -127,5 +125,5 @@ EXPOSE 5000 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD curl -sf http://localhost:8000/health && curl -sf http://localhost:5000/healthz || exit 1
-
-CMD ["./start_supervisor.sh"]
+    
+CMD ["./start.sh"]
