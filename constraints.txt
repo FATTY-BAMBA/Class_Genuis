@@ -52,7 +52,7 @@ visualdl==2.5.3
 
 # Critical pins to avoid segfaults / ABI issues - ALIGNED WITH REQUIREMENTS
 numpy==1.26.4  # Must match requirements.txt
-PyMuPDF==1.22.5
+PyMuPDF==1.19.0  # Must match paddleocr requirement
 python-docx==1.2.0
 protobuf>=3.20.0,<4  # More flexible than ==3.20.3
 
