@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+
 # ---- Stage 1: The Builder ----
 # Start from a guaranteed-stable official Python image
 FROM python:3.10-slim AS builder
@@ -21,10 +22,9 @@ RUN apt-get update && \
     libcairo2-dev libjpeg-dev libgif-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip in the global environment of this stable image
+# Upgrade pip and install all Python dependencies in a single layer
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# Install all Python dependencies
 RUN python -m pip install \
     "numpy==1.26.4" \
     "packaging==23.2" \
@@ -52,12 +52,8 @@ RUN python -m pip install \
     "pdf2docx==0.5.8" \
     "lanms-neo==1.0.2" \
     "Polygon3==3.0.9.1" \
-    "pycairo==${PYCAIRO_VERSION}"
-
-# Manual install for visualdl from a known-good branch
-RUN git clone --depth 1 --branch release/2.5 https://github.com/PaddlePaddle/VisualDL.git /tmp/visualdl_src && \
-    python -m pip install /tmp/visualdl_src && \
-    rm -rf /tmp/visualdl_src
+    "pycairo==${PYCAIRO_VERSION}" \
+    "visualdl==2.5.3"
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
 ARG BUILD_VARIANT=gpu
@@ -105,17 +101,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the entire Python environment from the builder stage
 COPY --from=builder /usr/local/ /usr/local/
 
-# Copy application-specific dependencies and code
-COPY requirements.txt .
-COPY constraints.txt /tmp/constraints.txt
-ENV PIP_CONSTRAINT=/tmp/constraints.txt
-RUN python -m pip install --no-cache-dir -r requirements.txt
+# Copy your application code
 COPY . .
 
-RUN chmod +x /app/start.sh
-RUN printf '#!/bin/bash\nexec uvicorn chapter_llama.main:app --host 0.0.0.0 --port 8000 --log-level warning\n' > /app/start_chapter_llama.sh && chmod +x /app/start_chapter_llama.sh
-RUN printf '#!/bin/bash\nset -e\n./start_chapter_llama.sh &\nsleep 5\ncurl -sf http://localhost:8000/health || exit 1\nexec ./start.sh\n' > /app/start_supervisor.sh && chmod +x /app/start_supervisor.sh
+# Create start scripts and set permissions
+RUN chmod +x /app/start.sh && \
+    printf '#!/bin/bash\nexec uvicorn chapter_llama.main:app --host 0.0.0.0 --port 8000 --log-level warning\n' > /app/start_chapter_llama.sh && chmod +x /app/start_chapter_llama.sh && \
+    printf '#!/bin/bash\nset -e\n./start_chapter_llama.sh &\nsleep 5\ncurl -sf http://localhost:8000/health || exit 1\nexec ./start.sh\n' > /app/start_supervisor.sh && chmod +x /app/start_supervisor.sh
 
+# Create a non-root user and set ownership
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace && \
     chown -R appuser:appuser /app /workspace
