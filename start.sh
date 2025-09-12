@@ -34,13 +34,6 @@ if torch.cuda.is_available():
 PY
 echo "==============================="
 
-# ---------- Chapter-Llama ----------
-echo "Starting Chapter-Llama service..."
-./start_chapter_llama.sh &
-sleep 5
-curl -sf http://localhost:8000/health || { echo "Chapter-Llama not ready"; exit 1; }
-echo "Chapter-Llama started on :8000"
-
 # ---------- Redis ----------
 MASKED_REDIS_URL="${REDIS_URL//:[^@]*@/:*****@}"
 echo "REDIS_URL detected: ${MASKED_REDIS_URL}"
