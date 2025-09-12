@@ -62,7 +62,6 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     && pip cache purge
 
 RUN python -m pip install "paddleocr==2.6.1" \
-    && pip cache purge \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
