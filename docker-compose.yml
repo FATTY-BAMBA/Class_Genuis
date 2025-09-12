@@ -24,7 +24,7 @@ services:
     container_name: class_genius_web
     restart: always
     ports:
-      - "8000:8000"  # Primary port - Gunicorn runs on 8000 in start.sh
+      - "5000:5000"  # Main Flask/Gunicorn app only
     volumes:
       - ./uploads:/app/uploads
       - ./segments:/app/segments
@@ -33,7 +33,7 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
     depends_on:
@@ -47,7 +47,7 @@ services:
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -69,7 +69,7 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
     depends_on:
