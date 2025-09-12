@@ -1,0 +1,47 @@
+# This file goes in: .github/workflows/build-and-push.yml
+
+name: Build and Push Docker Image
+
+# This workflow runs automatically whenever you push code to your "main" branch
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    # This job runs on a fresh, stable, native Linux server provided by GitHub
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checks out your repository's code so the workflow can access it
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Logs in to your Docker Hub account using the secrets you created
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3. Builds the GPU variant of your image and pushes it to Docker Hub
+      - name: Build and push GPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_VARIANT=gpu
+          push: true
+          tags: fattybamba/classgenius-pipeline:latest-gpu
+
+      # 4. Builds the CPU variant of your image and pushes it to Docker Hub
+      - name: Build and push CPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_VARIANT=cpu
+          push: true
+          tags: fattybamba/classgenius-pipeline:latest-cpu
