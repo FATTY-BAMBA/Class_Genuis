@@ -20,11 +20,11 @@ lightning>=2.4.0
 # Remove llama-cookbook and install its components directly
 peft>=0.17.1
 optimum>=1.21.0
-# sentence-transformers>=2.7.0  # Temporarily removed - likely pulls in hdbscan
+sentence-transformers>=2.7.0
 evaluate>=0.4.1
 gradio>=4.29.0
 loralib>=0.1.2
-# hdbscan removed - let pip find compatible version or skip if not needed
+hdbscan==0.8.33
 cython==0.29.36
 google-generativeai==0.8.3
 hf_transfer>=0.1.5
@@ -46,13 +46,13 @@ lmdb==1.7.3
 openpyxl==3.1.5
 pdf2docx==0.5.8
 premailer==3.10.0
-PyMuPDF==1.22.5  # Matching builder stage
+PyMuPDF==1.19.0  # Must match paddleocr requirement
 rapidfuzz==3.13.0
 visualdl==2.5.3
 
 # ==================== UTILITIES ====================
 # CRITICAL: Use builder stage versions to avoid conflicts
-numpy==1.26.4  # Changed from 1.24.4 to match builder
+numpy==1.24.4  # Downgrade for hdbscan compatibility
 protobuf>=3.20.0,<4  # More flexible range
 llvmlite==0.43.0
 numba==0.60.0
