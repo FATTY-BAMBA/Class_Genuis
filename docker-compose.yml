@@ -7,38 +7,86 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   web:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_web
     restart: always
     ports:
       - "5000:5000"
+      - "8000:8000"  # Added port 8000 based on your Dockerfile
     volumes:
       - ./uploads:/app/uploads
+      - ./segments:/app/segments  # Added based on your Dockerfile
       - ./models:/app/models
+      - ./workspace:/workspace  # Added for model cache
     env_file:
       - .env
-    depends_on:
-      - redis
-    deploy: {}  # optional; avoids Docker Compose warning
     environment:
+      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
-    runtime: nvidia  # <-- ADD THIS LINE for GPU support
+      - CUDA_VISIBLE_DEVICES=all
+    depends_on:
+      redis:
+        condition: service_healthy
+    # For GPU support, use either deploy OR runtime (not both)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health && curl -sf http://localhost:5000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_worker
     restart: always
-    command: >
-      bash -c "celery -A tasks.tasks:celery worker --loglevel=info --concurrency=1"
+    command: celery -A tasks.tasks:celery worker --loglevel=info --concurrency=1
     volumes:
       - ./uploads:/app/uploads
+      - ./segments:/app/segments
       - ./models:/app/models
+      - ./workspace:/workspace
     env_file:
       - .env
-    depends_on:
-      - redis
     environment:
+      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
-    runtime: nvidia  # <-- ADD THIS LINE for GPU support
+      - CUDA_VISIBLE_DEVICES=all
+    depends_on:
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  redis_data:
+    driver: local
