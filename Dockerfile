@@ -54,10 +54,11 @@ RUN python -m pip install \
     "Polygon3==3.0.9.1" \
     "pycairo==${PYCAIRO_VERSION}"
 
-# Manual install for visualdl from a known-good branch
-RUN git clone --depth 1 --branch release/2.5 https://github.com/PaddlePaddle/VisualDL.git /tmp/visualdl_src && \
-    python -m pip install /tmp/visualdl_src && \
-    rm -rf /tmp/visualdl_src
+# Install visualdl directly from PyPI (Option 1 - recommended)
+RUN python -m pip install "visualdl==2.5.3"
+
+# Alternative: Install from specific git branch if PyPI version doesn't work
+# RUN python -m pip install git+https://github.com/PaddlePaddle/VisualDL.git@release/2.5
 
 # Install paddlepaddle for the specified variant (CPU/GPU)
 ARG BUILD_VARIANT=gpu
