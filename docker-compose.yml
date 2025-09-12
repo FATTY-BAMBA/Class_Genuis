@@ -24,23 +24,21 @@ services:
     container_name: class_genius_web
     restart: always
     ports:
-      - "5000:5000"
-      - "8000:8000"  # Added port 8000 based on your Dockerfile
+      - "8000:8000"  # Primary port - Gunicorn runs on 8000 in start.sh
     volumes:
       - ./uploads:/app/uploads
-      - ./segments:/app/segments  # Added based on your Dockerfile
+      - ./segments:/app/segments
       - ./models:/app/models
-      - ./workspace:/workspace  # Added for model cache
+      - ./workspace:/workspace
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
+      - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
     depends_on:
       redis:
         condition: service_healthy
-    # For GPU support, use either deploy OR runtime (not both)
     deploy:
       resources:
         reservations:
@@ -49,7 +47,7 @@ services:
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health && curl -sf http://localhost:5000/healthz || exit 1"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -71,7 +69,7 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
+      - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
     depends_on:
