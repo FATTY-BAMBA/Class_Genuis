@@ -20,26 +20,25 @@ lightning>=2.4.0
 # Remove llama-cookbook and install its components directly
 peft>=0.17.1
 optimum>=1.21.0
-sentence-transformers>=2.7.0
+# sentence-transformers>=2.7.0  # Temporarily removed - pulls in hdbscan
 evaluate>=0.4.1
 gradio>=4.29.0
 loralib>=0.1.2
-hdbscan==0.8.33
+# hdbscan removed - causes compilation errors
 cython==0.29.36
 google-generativeai==0.8.3
 hf_transfer>=0.1.5
 
 # ==================== VISION / OCR ====================
-# These versions match what's in the Dockerfile builder stage
 opencv-python-headless==4.7.0.72
 pillow==9.5.0
 easyocr==1.7.1
 
-# PaddleOCR runtime deps - matching builder stage
+# PaddleOCR runtime deps
 attrdict==2.0.1
 beautifulsoup4==4.13.4
 fire==0.7.1
-fonttools==4.51.0  # Updated to match constraints
+fonttools==4.51.0
 imgaug==0.4.0
 lanms-neo==1.0.2
 lmdb==1.7.3
@@ -51,9 +50,8 @@ rapidfuzz==3.13.0
 visualdl==2.5.3
 
 # ==================== UTILITIES ====================
-# CRITICAL: Use builder stage versions to avoid conflicts
-numpy==1.24.4  # Downgrade for hdbscan compatibility
-protobuf>=3.20.0,<4  # More flexible range
+numpy==1.26.4  # Must match constraints.txt
+protobuf>=3.20.0,<4
 llvmlite==0.43.0
 numba==0.60.0
 tqdm==4.67.1
@@ -62,7 +60,7 @@ scikit-learn==1.0.2
 scikit-image==0.21.0
 python-docx==1.2.0
 openai-whisper==20231117
-onnxruntime==1.15.1  # Changed from 1.19.2 to match builder
+onnxruntime==1.15.1
 wandb>=0.18.0
 rich>=13.9.0
 tabulate>=0.9.0
