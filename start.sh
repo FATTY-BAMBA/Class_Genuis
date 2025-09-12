@@ -98,7 +98,7 @@ echo "Celery PID: ${CELERY_PID:-unknown}"
 # ---------- start Gunicorn (stdout -> tee -> file) ----------
 echo "Starting Gunicorn server..."
 stdbuf -oL -eL gunicorn app.app:app \
-  -b 0.0.0.0:5000 \
+  -b 0.0.0.0:8000 \
   --workers 1 \
   --threads 4 \
   --timeout 600 \
