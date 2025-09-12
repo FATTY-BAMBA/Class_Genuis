@@ -51,7 +51,7 @@ rapidfuzz==3.13.0
 visualdl==2.5.3
 
 # Critical pins to avoid segfaults / ABI issues - ALIGNED WITH BUILDER STAGE
-numpy==1.26.4  # Changed from 1.24.4 to match builder stage
+numpy==1.24.4  # Downgrade for hdbscan compatibility
 PyMuPDF==1.22.5
 python-docx==1.2.0
 protobuf>=3.20.0,<4  # More flexible than ==3.20.3

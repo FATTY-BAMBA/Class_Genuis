@@ -52,7 +52,7 @@ visualdl==2.5.3
 
 # ==================== UTILITIES ====================
 # CRITICAL: Use builder stage versions to avoid conflicts
-numpy==1.26.4  # Changed from 1.24.4 to match builder
+numpy==1.24.4  # Downgrade for hdbscan compatibility
 protobuf>=3.20.0,<4  # More flexible range
 llvmlite==0.43.0
 numba==0.60.0
