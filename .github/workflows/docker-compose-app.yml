@@ -12,24 +12,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Docker Compose for Test
-        # 👉 ADDED THIS FLAG to use the test file
         run: docker compose -f docker-compose.test.yml up --build -d
 
       - name: Wait for services to initialize
         run: sleep 15
 
       - name: Check container status
-        # 👉 ADDED THIS FLAG to use the test file
         run: docker compose -f docker-compose.test.yml ps
 
       - name: Check Redis service logs
-        # 👉 ADDED THIS FLAG to use the test file
         run: docker compose -f docker-compose.test.yml logs redis
 
       - name: Ping Redis from Web container
-        # 👉 ADDED THIS FLAG to use the test file
         run: docker compose -f docker-compose.test.yml exec web ping -c 4 redis
 
       - name: Check web service logs
-        # 👉 ADDED THIS FLAG to use the test file
+        # 👉 ADD THIS LINE to make this step always run
+        if: always()
         run: docker compose -f docker-compose.test.yml logs web
