@@ -7,7 +7,6 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,16 +20,11 @@ jobs:
       - name: Check container status
         run: docker-compose ps
 
-      # 👉 NEW STEP 1: Check the logs from the Redis container
-      # This will show us if the Redis server itself started correctly.
       - name: Check Redis service logs
         run: docker-compose logs redis
 
-      # 👉 NEW STEP 2: Test network connection from Web to Redis
-      # This tries to 'ping' the redis container from inside the web container.
       - name: Ping Redis from Web container
         run: docker-compose exec web ping -c 4 redis
 
-      # This step now has more context after the checks above.
       - name: Check web service logs
         run: docker-compose logs web
