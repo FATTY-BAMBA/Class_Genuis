@@ -7,7 +7,8 @@ services:
       args:
         BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_web
-    # The "restart: always" line has been removed from this service
+    # 👉 ADD THIS LINE to run as the root user
+    user: "root"
     ports:
       - "5000:5000"
     volumes:
