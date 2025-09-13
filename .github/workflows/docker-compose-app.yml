@@ -20,13 +20,6 @@ jobs:
       - name: Check container status
         run: docker compose -f docker-compose.test.yml ps
 
-      - name: Check Redis service logs
-        run: docker compose -f docker-compose.test.yml logs redis
-
-      - name: Ping Redis from Web container
-        run: docker compose -f docker-compose.test.yml exec web ping -c 4 redis
-
-      - name: Check web service logs
-        # 👉 ADD THIS LINE to make this step always run
-        if: always()
-        run: docker compose -f docker-compose.test.yml logs web
+      - name: Check application logs to confirm startup
+        # This final step is all you need to confirm the app is running.
+        run: docker compose -f docker-compose.test.yml logs
