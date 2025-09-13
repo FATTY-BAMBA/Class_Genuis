@@ -7,7 +7,6 @@ services:
       args:
         BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_web
-    # 👉 ADD THIS LINE to run as the root user
     user: "root"
     ports:
       - "5000:5000"
@@ -18,6 +17,9 @@ services:
       - ./workspace:/workspace
     environment:
       - REDIS_URL=redis://redis:6379/0
+      # 👉 ADD THESE TWO DUMMY VARIABLES
+      - RUNPOD_API_KEY=dummy_key_for_testing
+      - RUNPOD_POD_ID=dummy_id_for_testing
     depends_on:
       - redis
     networks:
