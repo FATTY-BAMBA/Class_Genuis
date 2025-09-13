@@ -1,27 +1,6 @@
 version: '3.8'
 
-networks:
-  app-network:
-    driver: bridge
-
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: class_genius_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
   web:
     build:
       context: .
@@ -30,21 +9,16 @@ services:
     container_name: class_genius_web
     restart: always
     ports:
-      - "5000:5000"  # Main Flask/Gunicorn app only
+      - "5000:5000"
     volumes:
       - ./uploads:/app/uploads
       - ./segments:/app/segments
       - ./models:/app/models
       - ./workspace:/workspace
     environment:
-      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
-      - REDIS_WAIT_SEC=60  # Increase wait time
+      - REDIS_URL=redis://localhost:6379/0  # Use local Redis
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
-    networks:
-      - app-network
-    depends_on:
-      - redis  # Simplified - removed condition
     deploy:
       resources:
         reservations:
@@ -52,43 +26,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5000/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  worker:
-    build:
-      context: .
-      args:
-        BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
-    container_name: class_genius_worker
-    restart: always
-    command: celery -A tasks.tasks:celery worker --loglevel=info --concurrency=1
-    volumes:
-      - ./uploads:/app/uploads
-      - ./segments:/app/segments
-      - ./models:/app/models
-      - ./workspace:/workspace
-    environment:
-      - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=all
-    networks:
-      - app-network
-    depends_on:
-      - redis  # Simplified
-      - web    # Simplified
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-volumes:
-  redis_data:
-    driver: local
