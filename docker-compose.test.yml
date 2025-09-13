@@ -1,0 +1,35 @@
+# New file: docker-compose.test.yml
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
+    container_name: class_genius_web
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./segments:/app/segments
+      - ./models:/app/models
+      - ./workspace:/workspace
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - app-net
+
+  redis:
+    image: "redis:alpine"
+    container_name: class_genius_redis
+    restart: always
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
