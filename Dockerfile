@@ -101,7 +101,7 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg redis-tools libsndfile1 libgl1 libgomp1 curl \
+    ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
