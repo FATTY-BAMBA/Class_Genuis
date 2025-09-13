@@ -1,37 +1,36 @@
-# A descriptive name for your workflow
 name: Build and Test Docker Compose App
 
-# Triggers the workflow on push events to the "main" branch
 on:
   push:
     branches: [ "main" ]
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This job is named "build-and-test"
   build-and-test:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Step 1: Checks out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Build and run the docker-compose services in the background
       - name: Run Docker Compose
         run: docker-compose up --build -d
 
-      # Step 3: Wait for a few seconds to let services initialize
-      - name: Wait for services
-        run: sleep 10
+      - name: Wait for services to initialize
+        run: sleep 15
 
-      # Step 4: Check the status of the running containers
       - name: Check container status
         run: docker-compose ps
 
-      # Step 5: Check the logs of the web service to verify it started correctly
-      # This is where you will see the "Redis connection successful" message or any errors.
+      # 👉 NEW STEP 1: Check the logs from the Redis container
+      # This will show us if the Redis server itself started correctly.
+      - name: Check Redis service logs
+        run: docker-compose logs redis
+
+      # 👉 NEW STEP 2: Test network connection from Web to Redis
+      # This tries to 'ping' the redis container from inside the web container.
+      - name: Ping Redis from Web container
+        run: docker-compose exec web ping -c 4 redis
+
+      # This step now has more context after the checks above.
       - name: Check web service logs
         run: docker-compose logs web
