@@ -11,25 +11,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Docker Compose
-        # 👉 CHANGED from docker-compose to docker compose
-        run: docker compose up --build -d
+      - name: Run Docker Compose for Test
+        # 👉 ADDED THIS FLAG to use the test file
+        run: docker compose -f docker-compose.test.yml up --build -d
 
       - name: Wait for services to initialize
         run: sleep 15
 
       - name: Check container status
-        # 👉 CHANGED from docker-compose to docker compose
-        run: docker compose ps
+        # 👉 ADDED THIS FLAG to use the test file
+        run: docker compose -f docker-compose.test.yml ps
 
       - name: Check Redis service logs
-        # 👉 CHANGED from docker-compose to docker compose
-        run: docker compose logs redis
+        # 👉 ADDED THIS FLAG to use the test file
+        run: docker compose -f docker-compose.test.yml logs redis
 
       - name: Ping Redis from Web container
-        # 👉 CHANGED from docker-compose to docker compose
-        run: docker compose exec web ping -c 4 redis
+        # 👉 ADDED THIS FLAG to use the test file
+        run: docker compose -f docker-compose.test.yml exec web ping -c 4 redis
 
       - name: Check web service logs
-        # 👉 CHANGED from docker-compose to docker compose
-        run: docker compose logs web
+        # 👉 ADDED THIS FLAG to use the test file
+        run: docker compose -f docker-compose.test.yml logs web
