@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  app-network:
+    driver: bridge
+
 services:
   redis:
     image: redis:7-alpine
@@ -10,6 +14,8 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    networks:
+      - app-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -32,11 +38,13 @@ services:
       - ./workspace:/workspace
     environment:
       - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
+      - REDIS_WAIT_SEC=60  # Increase wait time
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
+    networks:
+      - app-network
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis  # Simplified - removed condition
     deploy:
       resources:
         reservations:
@@ -68,11 +76,11 @@ services:
       - REDIS_URL=redis://redis:6379/0  # Critical: points to Redis service
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
+    networks:
+      - app-network
     depends_on:
-      redis:
-        condition: service_healthy
-      web:
-        condition: service_healthy
+      - redis  # Simplified
+      - web    # Simplified
     deploy:
       resources:
         reservations:
