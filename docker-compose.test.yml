@@ -1,5 +1,4 @@
-# New file: docker-compose.test.yml
-version: '3.8'
+# Updated file: docker-compose.test.yml
 
 services:
   web:
@@ -8,7 +7,7 @@ services:
       args:
         BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_web
-    restart: always
+    # The "restart: always" line has been removed from this service
     ports:
       - "5000:5000"
     volumes:
