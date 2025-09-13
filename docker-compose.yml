@@ -16,14 +16,14 @@ services:
       - ./models:/app/models
       - ./workspace:/workspace
     environment:
-      # 👉 POINT TO THE REDIS SERVICE, NOT LOCALHOST
       - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
-    # 👉 ADD THIS TO MAKE WEB START AFTER REDIS
+      # 👉 ADD THESE LINES to load credentials from the RunPod environment
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - RUNPOD_POD_ID=${RUNPOD_POD_ID}
     depends_on:
       - redis
-    # 👉 ADD THIS TO CONNECT TO THE SHARED NETWORK
     networks:
       - app-net
     deploy:
@@ -34,16 +34,13 @@ services:
               count: all
               capabilities: [gpu]
 
-  # 👉 ADD THIS ENTIRE SERVICE BLOCK FOR REDIS
   redis:
     image: "redis:alpine"
     container_name: class_genius_redis
     restart: always
-    # 👉 ADD THIS TO CONNECT TO THE SHARED NETWORK
     networks:
       - app-net
 
-# 👉 ADD THIS NETWORK DEFINITION AT THE END
 networks:
   app-net:
     driver: bridge
