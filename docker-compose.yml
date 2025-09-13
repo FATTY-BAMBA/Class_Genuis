@@ -16,9 +16,16 @@ services:
       - ./models:/app/models
       - ./workspace:/workspace
     environment:
-      - REDIS_URL=redis://localhost:6379/0  # Use local Redis
+      # 👉 POINT TO THE REDIS SERVICE, NOT LOCALHOST
+      - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
+    # 👉 ADD THIS TO MAKE WEB START AFTER REDIS
+    depends_on:
+      - redis
+    # 👉 ADD THIS TO CONNECT TO THE SHARED NETWORK
+    networks:
+      - app-net
     deploy:
       resources:
         reservations:
@@ -26,3 +33,17 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # 👉 ADD THIS ENTIRE SERVICE BLOCK FOR REDIS
+  redis:
+    image: "redis:alpine"
+    container_name: class_genius_redis
+    restart: always
+    # 👉 ADD THIS TO CONNECT TO THE SHARED NETWORK
+    networks:
+      - app-net
+
+# 👉 ADD THIS NETWORK DEFINITION AT THE END
+networks:
+  app-net:
+    driver: bridge
