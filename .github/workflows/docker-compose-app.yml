@@ -12,19 +12,24 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Docker Compose
-        run: docker-compose up --build -d
+        # 👉 CHANGED from docker-compose to docker compose
+        run: docker compose up --build -d
 
       - name: Wait for services to initialize
         run: sleep 15
 
       - name: Check container status
-        run: docker-compose ps
+        # 👉 CHANGED from docker-compose to docker compose
+        run: docker compose ps
 
       - name: Check Redis service logs
-        run: docker-compose logs redis
+        # 👉 CHANGED from docker-compose to docker compose
+        run: docker compose logs redis
 
       - name: Ping Redis from Web container
-        run: docker-compose exec web ping -c 4 redis
+        # 👉 CHANGED from docker-compose to docker compose
+        run: docker compose exec web ping -c 4 redis
 
       - name: Check web service logs
-        run: docker-compose logs web
+        # 👉 CHANGED from docker-compose to docker compose
+        run: docker compose logs web
