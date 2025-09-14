@@ -19,9 +19,6 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
-      # 👉 ADD THESE LINES to load credentials from the RunPod environment
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
-      - RUNPOD_POD_ID=${RUNPOD_POD_ID}
     depends_on:
       - redis
     networks:
