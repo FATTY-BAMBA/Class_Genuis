@@ -84,54 +84,129 @@ logger.info(f"🗂  Folders → cache:{CACHE_DIR} runs:{RUNS_BASE} uploads:{UPLO
 # ==================== Helpers ====================
 
 def download_video(play_url, filename, max_retries=3, timeout=1800):
+    """
+    Download video with comprehensive logging and validation.
+    Uses aria2c for better performance and reliability.
+    """
     local_path = os.path.join(UPLOAD_FOLDER, filename)
     
+    logger.info("=" * 60)
+    logger.info("📥 VIDEO DOWNLOAD STARTING")
+    logger.info(f"🔗 Source URL: {play_url}")
+    logger.info(f"💾 Target path: {local_path}")
+    logger.info(f"📁 Upload folder: {UPLOAD_FOLDER}")
+    logger.info("=" * 60)
+    
+    # Ensure upload folder exists
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    
     for attempt in range(1, max_retries + 1):
-        logger.info(f"🌐 [Download Attempt {attempt}/{max_retries}]")
-        logger.info(f"📥 Downloading from: {play_url}")
-        logger.info(f"💾 Saving to: {local_path}")
+        logger.info(f"🌐 Download Attempt {attempt}/{max_retries}")
         
         try:
-            # Use aria2c for better download with progress
-            result = subprocess.run(
-                ["aria2c", "-x", "4", "-s", "4", "-d", UPLOAD_FOLDER, "-o", filename, play_url],
-                capture_output=True, text=True, timeout=timeout
-            )
+            # Check if aria2c is available, fallback to curl
+            download_tool = "aria2c"
+            try:
+                subprocess.run(["which", "aria2c"], check=True, capture_output=True)
+                # Use aria2c with optimized settings
+                cmd = [
+                    "aria2c",
+                    "-x", "4",  # 4 parallel connections
+                    "-s", "4",  # Split file into 4 segments
+                    "-k", "1M",  # 1MB chunk size
+                    "--file-allocation=none",  # Faster for SSDs
+                    "--console-log-level=warn",  # Less verbose
+                    "--summary-interval=10",  # Progress every 10 seconds
+                    "-d", UPLOAD_FOLDER,  # Download directory
+                    "-o", filename,  # Output filename
+                    play_url
+                ]
+                logger.info(f"📥 Using aria2c for faster download")
+            except subprocess.CalledProcessError:
+                # Fallback to curl
+                download_tool = "curl"
+                cmd = ["curl", "-L", "-o", local_path, "--progress-bar", play_url]
+                logger.info(f"📥 Using curl (aria2c not found)")
+            
+            # Start download
+            start_time = time.time()
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             
             if result.returncode == 0:
-                # Verify file exists and has size
+                download_time = time.time() - start_time
+                
+                # Verify file exists
                 if os.path.exists(local_path):
                     file_size = os.path.getsize(local_path)
                     file_size_mb = file_size / (1024 * 1024)
-                    logger.info(f"✅ Download COMPLETE: {local_path}")
-                    logger.info(f"📊 File size: {file_size_mb:.2f} MB ({file_size} bytes)")
+                    
+                    # Check if file is not empty
+                    if file_size == 0:
+                        logger.error(f"❌ Downloaded file is empty (0 bytes)")
+                        if attempt < max_retries:
+                            time.sleep(attempt * 5)
+                            continue
+                        raise RuntimeError("Downloaded file is empty")
+                    
+                    logger.info(f"✅ Download SUCCESSFUL")
+                    logger.info(f"📊 File size: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+                    logger.info(f"⏱️ Download time: {download_time:.1f} seconds")
+                    logger.info(f"📍 File location: {local_path}")
                     
                     # Verify it's a valid video file
-                    verify_cmd = subprocess.run(
-                        ["ffprobe", "-v", "error", "-show_format", "-show_streams", local_path],
-                        capture_output=True, text=True
-                    )
-                    if verify_cmd.returncode == 0:
-                        logger.info(f"✅ Video file VERIFIED as valid media")
-                    else:
-                        logger.warning(f"⚠️ File downloaded but may not be valid video")
+                    try:
+                        verify_cmd = subprocess.run(
+                            ["ffprobe", "-v", "error", "-show_format", "-show_streams", local_path],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if verify_cmd.returncode == 0:
+                            logger.info(f"✅ Video file VERIFIED as valid media")
+                            
+                            # Extract video info
+                            duration_cmd = subprocess.run(
+                                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                 "-of", "default=noprint_wrappers=1:nokey=1", local_path],
+                                capture_output=True, text=True
+                            )
+                            if duration_cmd.returncode == 0:
+                                duration = float(duration_cmd.stdout.strip())
+                                logger.info(f"📹 Video duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
+                        else:
+                            logger.warning(f"⚠️ File may not be a valid video: {verify_cmd.stderr}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Could not verify video with ffprobe: {e}")
                     
+                    logger.info("=" * 60)
                     return local_path
                 else:
                     logger.error(f"❌ File not found after download: {local_path}")
             else:
-                logger.error(f"❌ Download failed: {result.stderr}")
+                logger.error(f"❌ Download failed with {download_tool}")
+                logger.error(f"❌ Error output: {result.stderr}")
                 
         except subprocess.TimeoutExpired:
             logger.error(f"❌ Download timeout after {timeout} seconds")
         except Exception as e:
-            logger.error(f"❌ Download error: {e}")
-            
+            logger.error(f"❌ Download error: {e}", exc_info=True)
+        
+        # Retry logic
         if attempt < max_retries:
             wait_time = attempt * 5
             logger.info(f"⏳ Waiting {wait_time} seconds before retry...")
             time.sleep(wait_time)
+            
+            # Clean up partial download if exists
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                    logger.info(f"🗑️ Cleaned up partial download")
+                except:
+                    pass
     
+    # All retries exhausted
+    logger.error("=" * 60)
+    logger.error(f"❌ DOWNLOAD FAILED after {max_retries} attempts")
+    logger.error("=" * 60)
     raise RuntimeError(f"Failed to download video after {max_retries} attempts")
 
 def post_to_client_api(payload):
