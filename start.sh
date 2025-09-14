@@ -19,7 +19,7 @@ export CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-1}
 export CELERY_PREFETCH=${CELERY_PREFETCH:-1}
 export CELERY_MAX_TASKS_PER_CHILD=${CELERY_MAX_TASKS_PER_CHILD:-0}
 export CELERY_LEAN=${CELERY_LEAN:-false}
-export LOG_LEVEL=${LOG_LEVEL:-INFO}   # NEW: app logging level
+export LOG_LEVEL=${LOG_LEVEL:-INFO}
 
 mkdir -p /workspace/logs
 
@@ -91,8 +91,8 @@ echo "Starting Celery worker..."
 # line-buffer so logs appear instantly
 stdbuf -oL -eL celery -A tasks.tasks:celery worker "${CELERY_COMMON_OPTS[@]}" --pidfile=/tmp/celery.pid \
   2>&1 | tee -a /workspace/logs/celery.log &
-sleep 1
-CELERY_PID=$(cat /tmp/celery.pid || true)
+sleep 2
+CELERY_PID=$(cat /tmp/celery.pid 2>/dev/null || echo "")
 echo "Celery PID: ${CELERY_PID:-unknown}"
 
 # ---------- start Gunicorn (stdout -> tee -> file) ----------
@@ -107,10 +107,31 @@ stdbuf -oL -eL gunicorn app.app:app \
   --error-logfile  - \
   --pid /tmp/gunicorn.pid \
   2>&1 | tee -a /workspace/logs/gunicorn.log &
-sleep 1
-GUNICORN_PID=$(cat /tmp/gunicorn.pid || true)
+sleep 2
+GUNICORN_PID=$(cat /tmp/gunicorn.pid 2>/dev/null || echo "")
 echo "Gunicorn PID: ${GUNICORN_PID:-unknown}"
 
+# Add debugging to see what's running
+echo "Current running processes:"
+ps aux
+
+# Wait longer before checking if processes are running
+sleep 5
+
+# Check if processes are still running
+if ! kill -0 $GUNICORN_PID 2>/dev/null; then
+    echo "Gunicorn process is not running. Checking logs..."
+    tail -20 /workspace/logs/gunicorn.log
+    exit 1
+fi
+
+if ! kill -0 $CELERY_PID 2>/dev/null; then
+    echo "Celery process is not running. Checking logs..."
+    tail -20 /workspace/logs/celery.log
+    exit 1
+fi
+
+echo "All services started successfully. Waiting for processes..."
 # ---------- supervise ----------
 wait -n
 STATUS=$?
