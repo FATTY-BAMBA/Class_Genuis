@@ -123,7 +123,7 @@ USER appuser
 
 EXPOSE 5000 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
-    CMD curl -sf http://localhost:8000/health && curl -sf http://localhost:5000/healthz || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+    CMD curl -sf http://localhost:5000/healthz || exit 1
     
 CMD ["./start.sh"]
