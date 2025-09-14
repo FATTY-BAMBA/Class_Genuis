@@ -85,17 +85,54 @@ logger.info(f"🗂  Folders → cache:{CACHE_DIR} runs:{RUNS_BASE} uploads:{UPLO
 
 def download_video(play_url, filename, max_retries=3, timeout=1800):
     local_path = os.path.join(UPLOAD_FOLDER, filename)
+    
     for attempt in range(1, max_retries + 1):
-        logger.info(f"🌐 [Download Attempt {attempt}] URL: {play_url}")
+        logger.info(f"🌐 [Download Attempt {attempt}/{max_retries}]")
+        logger.info(f"📥 Downloading from: {play_url}")
+        logger.info(f"💾 Saving to: {local_path}")
+        
         try:
-            subprocess.run(["curl", "-L", "-o", local_path, play_url], check=True, timeout=timeout)
-            logger.info(f"✅ Download complete: {local_path}")
-            return local_path
+            # Use aria2c for better download with progress
+            result = subprocess.run(
+                ["aria2c", "-x", "4", "-s", "4", "-d", UPLOAD_FOLDER, "-o", filename, play_url],
+                capture_output=True, text=True, timeout=timeout
+            )
+            
+            if result.returncode == 0:
+                # Verify file exists and has size
+                if os.path.exists(local_path):
+                    file_size = os.path.getsize(local_path)
+                    file_size_mb = file_size / (1024 * 1024)
+                    logger.info(f"✅ Download COMPLETE: {local_path}")
+                    logger.info(f"📊 File size: {file_size_mb:.2f} MB ({file_size} bytes)")
+                    
+                    # Verify it's a valid video file
+                    verify_cmd = subprocess.run(
+                        ["ffprobe", "-v", "error", "-show_format", "-show_streams", local_path],
+                        capture_output=True, text=True
+                    )
+                    if verify_cmd.returncode == 0:
+                        logger.info(f"✅ Video file VERIFIED as valid media")
+                    else:
+                        logger.warning(f"⚠️ File downloaded but may not be valid video")
+                    
+                    return local_path
+                else:
+                    logger.error(f"❌ File not found after download: {local_path}")
+            else:
+                logger.error(f"❌ Download failed: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"❌ Download timeout after {timeout} seconds")
         except Exception as e:
             logger.error(f"❌ Download error: {e}")
-            if attempt < max_retries:
-                time.sleep(attempt * 5)
-    raise RuntimeError("🛻 Failed to download video after retries")
+            
+        if attempt < max_retries:
+            wait_time = attempt * 5
+            logger.info(f"⏳ Waiting {wait_time} seconds before retry...")
+            time.sleep(wait_time)
+    
+    raise RuntimeError(f"Failed to download video after {max_retries} attempts")
 
 def post_to_client_api(payload):
     if not CLIENT_UPLOAD_API:
@@ -218,11 +255,10 @@ def _ocr_segments_from_aligner(video_path: str, asr_file: str):
 
     return ocr_filtered, ocr_raw, ocr_context_md, seg_pairs
 
-
 def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW_SEC, do_ocr: bool = True):
     """
-    ASR via SingleVideo, cache raw asr.txt & duration, parse into per-line segs.
-
+    ASR via SingleVideo with comprehensive GPU detection and video validation logging.
+    
     Behavior (no legacy fallback):
       - Try to build ASR-anchored micro-windows via the aligner parser (seg_pairs).
       - Build QA audio windows by concatenating ASR text overlapping each seg_pair.
@@ -231,51 +267,185 @@ def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW
         proceed with ASR-only by using per-line ASR segments (segs_raw) as the QA audio windows.
       - Never compute or use legacy 5-minute windows.
     """
+    
+    # ============= STAGE 1: VIDEO VALIDATION & GPU DETECTION =============
+    logger.info("=" * 60)
+    logger.info("🎯 STARTING ASR PROCESSING")
+    logger.info("=" * 60)
+    
+    # Check video file exists and is valid
+    if not os.path.exists(video_path):
+        logger.error(f"❌ Video file NOT FOUND: {video_path}")
+        return {
+            "success": False,
+            "audio_segments": [],
+            "ocr_segments": [],
+            "method": "chapter_llama_asr",
+            "error": "Video file not found"
+        }
+    
+    # Get video file info
+    video_size = os.path.getsize(video_path)
+    video_size_mb = video_size / (1024 * 1024)
+    logger.info(f"📹 Processing video: {video_path}")
+    logger.info(f"📊 Video size: {video_size_mb:.2f} MB ({video_size:,} bytes)")
+    
+    # Verify it's a valid video file using ffprobe
     try:
-        # --- Load ASR from chapter_llama ---
+        verify_cmd = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_format", "-show_streams", video_path],
+            capture_output=True, text=True, timeout=10
+        )
+        if verify_cmd.returncode == 0:
+            logger.info(f"✅ Video file VERIFIED as valid media")
+        else:
+            logger.warning(f"⚠️ Video validation warning: {verify_cmd.stderr}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not verify video with ffprobe: {e}")
+    
+    # GPU Status Check
+    logger.info("-" * 60)
+    logger.info("🖥️ GPU/CUDA STATUS CHECK")
+    logger.info("-" * 60)
+    
+    try:
+        import torch
+        cuda_available = torch.cuda.is_available()
+        logger.info(f"🎮 CUDA Available: {cuda_available}")
+        
+        if cuda_available:
+            gpu_count = torch.cuda.device_count()
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_props = torch.cuda.get_device_properties(0)
+            gpu_memory_gb = gpu_props.total_memory / (1024**3)
+            
+            logger.info(f"🎮 GPU Count: {gpu_count}")
+            logger.info(f"🎮 GPU Name: {gpu_name}")
+            logger.info(f"🎮 GPU Memory: {gpu_memory_gb:.2f} GB")
+            logger.info(f"🎮 CUDA Version: {torch.version.cuda}")
+            
+            # Check current GPU memory usage
+            allocated = torch.cuda.memory_allocated(0) / (1024**3)
+            reserved = torch.cuda.memory_reserved(0) / (1024**3)
+            free = gpu_memory_gb - reserved
+            
+            logger.info(f"📊 GPU Memory Allocated: {allocated:.2f} GB")
+            logger.info(f"📊 GPU Memory Reserved: {reserved:.2f} GB")
+            logger.info(f"📊 GPU Memory Free: {free:.2f} GB")
+            
+            # Test GPU is actually working
+            try:
+                test_tensor = torch.randn(100, 100).cuda()
+                logger.info("✅ GPU compute test: PASSED")
+            except Exception as gpu_test_error:
+                logger.error(f"❌ GPU compute test FAILED: {gpu_test_error}")
+                cuda_available = False
+        else:
+            logger.warning("⚠️ CUDA NOT AVAILABLE - Running on CPU (will be SLOW!)")
+            logger.warning("⚠️ This will significantly increase processing time")
+            
+        # Check environment variables
+        whisper_device = os.getenv("WHISPER_DEVICE", "cuda")
+        cuda_visible = os.getenv("CUDA_VISIBLE_DEVICES", "not set")
+        logger.info(f"🎤 WHISPER_DEVICE env: {whisper_device}")
+        logger.info(f"🎤 CUDA_VISIBLE_DEVICES env: {cuda_visible}")
+        
+        # Warn if mismatch
+        if whisper_device == "cuda" and not cuda_available:
+            logger.warning("⚠️ WHISPER_DEVICE set to 'cuda' but no GPU available!")
+            
+    except ImportError as e:
+        logger.error(f"❌ PyTorch not properly installed: {e}")
+        cuda_available = False
+    except Exception as e:
+        logger.error(f"❌ Error checking GPU status: {e}")
+        cuda_available = False
+    
+    logger.info("=" * 60)
+    
+    # ============= STAGE 2: ASR PROCESSING =============
+    try:
+        # Load ASR from chapter_llama
+        logger.info("🚀 Loading chapter_llama SingleVideo processor...")
         try:
             from chapter_llama.src.data.single_video import SingleVideo
-        except Exception:
+        except ImportError:
             from chapter_llama.src.data.single_video import SingleVideo
-
+        
         t0 = time.time()
+        
+        logger.info(f"📝 Initializing SingleVideo for: {Path(video_path).name}")
         sv = SingleVideo(Path(video_path))
-        vid_id   = next(iter(sv))
+        vid_id = next(iter(sv))
+        logger.info(f"📝 Video ID: {vid_id}")
+        
+        # Start ASR transcription
+        logger.info("🎤 Starting ASR transcription (this may take several minutes)...")
+        logger.info(f"🎤 Using device: {'GPU' if cuda_available else 'CPU'}")
+        
+        asr_start = time.time()
         asr_text = sv.get_asr(vid_id)             # "HH:MM:SS: text"
-        duration = float(sv.get_duration(vid_id)) # seconds
-
+        asr_elapsed = time.time() - asr_start
+        
+        duration = float(sv.get_duration(vid_id))  # seconds
+        
+        logger.info(f"✅ ASR transcription COMPLETE in {asr_elapsed:.1f} seconds")
+        logger.info(f"📊 Video duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
+        logger.info(f"📊 ASR text length: {len(asr_text):,} characters")
+        logger.info(f"📊 ASR lines: {len(asr_text.splitlines())} lines")
+        
+        # Sample first few lines for verification
+        sample_lines = asr_text.splitlines()[:3]
+        logger.info("📝 Sample ASR output (first 3 lines):")
+        for line in sample_lines:
+            logger.info(f"   {line[:100]}...")  # First 100 chars of each line
+        
         # Ensure raw ASR artifacts exist for downstream consumers
         asr_cache_dir = Path("outputs/inference") / Path(video_path).stem
         asr_cache_dir.mkdir(parents=True, exist_ok=True)
         asr_file = asr_cache_dir / "asr.txt"
         dur_file = asr_cache_dir / "duration.txt"
+        
+        logger.info(f"💾 Saving ASR artifacts to: {asr_cache_dir}")
+        
         if not asr_file.exists():
             with codecs.open(asr_file, "w", encoding="utf-8") as f:
                 f.write(asr_text if asr_text.endswith("\n") else asr_text + "\n")
+            logger.info(f"✅ Saved ASR text to: {asr_file}")
+        
         if not dur_file.exists():
             dur_file.write_text(str(duration), encoding="utf-8")
-
-        # ---- Try to surface VAD coverage metrics saved by SingleVideo/ASRProcessor
+            logger.info(f"✅ Saved duration to: {dur_file}")
+        
+        # Try to surface VAD coverage metrics saved by SingleVideo/ASRProcessor
         metrics_path = asr_cache_dir / "asr_metrics.json"
         speech_duration = removed_duration = speech_ratio = removed_ratio = None
+        
         if metrics_path.exists():
             try:
                 m = json.loads(metrics_path.read_text(encoding="utf-8"))
                 speech_duration = float(m.get("speech_duration", 0.0))
                 removed_duration = float(m.get("removed_duration", 0.0))
-                # Prefer file value, fallback to computed duration
                 duration_f = float(m.get("duration", duration) or duration)
                 speech_ratio = float(m.get("speech_ratio", (speech_duration / duration_f) if duration_f > 0 else 0.0))
                 removed_ratio = float(m.get("removed_ratio", 1.0 - speech_ratio))
+                
+                logger.info("-" * 60)
+                logger.info("🧪 VAD (Voice Activity Detection) Summary:")
                 logger.info(
-                    "🧪 VAD summary: kept %.1f%% (%.3fs), removed %.1f%% (%.3fs) of %.3fs total",
-                    speech_ratio * 100.0, speech_duration,
-                    removed_ratio * 100.0, removed_duration,
-                    duration_f,
+                    f"   Speech kept: {speech_ratio * 100.0:.1f}% ({speech_duration:.1f}s)"
                 )
+                logger.info(
+                    f"   Silence removed: {removed_ratio * 100.0:.1f}% ({removed_duration:.1f}s)"
+                )
+                logger.info(f"   Total duration: {duration_f:.1f}s")
+                logger.info("-" * 60)
             except Exception as _e:
-                logger.warning("⚠️ Failed to read asr_metrics.json: %s", _e)
-
+                logger.warning(f"⚠️ Failed to read asr_metrics.json: {_e}")
+        
+        # ============= STAGE 3: PARSE ASR TEXT =============
+        logger.info("📝 Parsing ASR text into segments...")
+        
         # Parse raw ASR lines -> per-line segments (start), then infer end
         segs_raw = []
         for line in asr_text.splitlines():
@@ -287,8 +457,9 @@ def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW
             text = text.strip()
             if text:
                 segs_raw.append({"start": float(start), "text": text})
-
+        
         if not segs_raw:
+            logger.error("❌ No ASR lines could be parsed")
             return {
                 "success": False,
                 "audio_segments": [],
@@ -296,47 +467,67 @@ def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW
                 "method": "chapter_llama_asr",
                 "error": "no_asr_lines"
             }
-
+        
+        logger.info(f"✅ Parsed {len(segs_raw)} ASR segments")
+        
+        # Infer end times for segments
         for i in range(len(segs_raw)):
             segs_raw[i]["end"] = float(segs_raw[i+1]["start"]) if i < len(segs_raw) - 1 else duration
-
-        # ================= Aligner-first windows (OCR optional) =================
+        
+        # ============= STAGE 4: BUILD ALIGNED WINDOWS (OCR OPTIONAL) =============
+        logger.info("-" * 60)
+        logger.info("🔧 Building aligned windows for QA...")
+        
         ocr_raw = []
         ocr_filtered = []
         ocr_context_md = ""
         audio_windows_for_qa = []
-
+        
         # Try to derive aligned windows (seg_pairs) from ASR timestamps via aligner parser
         seg_pairs = []
         if _aligner_parse_existing_asr is not None:
             try:
+                logger.info("📐 Using aligner to build micro-windows...")
                 asr_items = _aligner_parse_existing_asr(asr_file)  # [{"start_sec", "text"}]
+                
                 if asr_items:
                     n = int(os.getenv("OCR_SAMPLE_EVERY_N", "10"))
                     sampled = asr_items[::max(1, n)]
                     seg_pairs = [(max(0, x["start_sec"] - 5), x["start_sec"] + 15) for x in sampled]
+                    logger.info(f"✅ Built {len(seg_pairs)} aligned segment pairs")
+                else:
+                    logger.warning("⚠️ No items returned from aligner parse")
             except Exception as e:
-                logger.warning("⚠️ Aligner parse failed; will proceed with ASR-only: %s", e)
+                logger.warning(f"⚠️ Aligner parse failed: {e}")
         else:
-            logger.warning("⚠️ Aligner parse function unavailable; proceeding with ASR-only if needed.")
-
+            logger.warning("⚠️ Aligner parse function not available")
+        
         # Build QA audio windows from seg_pairs (if any)
         if seg_pairs:
+            logger.info("📊 Building QA audio windows from aligned segments...")
             for (ws, we) in seg_pairs:
                 text = _concat_asr_text_in_window(segs_raw, ws, we)
                 if text:
                     audio_windows_for_qa.append({"start": float(ws), "end": float(we), "text": text})
-
+            logger.info(f"✅ Created {len(audio_windows_for_qa)} audio windows")
+            
             # Optionally run OCR on those micro-windows
             if do_ocr and OCRProcessor is not None:
+                logger.info("🔍 Running OCR processing on video frames...")
+                ocr_start = time.time()
                 try:
                     proc = OCRProcessor()
                     items = proc.get_text_for_many_segments(video_path=Path(video_path), segments=seg_pairs)
                     ocr_raw = items
+                    
                     for it in items:
                         joined = " ".join(it.get("texts", []) or []).strip()
                         if joined:
                             ocr_filtered.append({"start": float(it["start"]), "end": float(it["end"]), "text": joined})
+                    
+                    ocr_elapsed = time.time() - ocr_start
+                    logger.info(f"✅ OCR complete in {ocr_elapsed:.1f}s: {len(ocr_filtered)} segments with text")
+                    
                     if _aligner_get_context_markdown is not None:
                         try:
                             ocr_context_md = _aligner_get_context_markdown(
@@ -344,52 +535,65 @@ def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW
                                 asr_file_path=asr_file,
                                 ocr_processor=proc
                             )
+                            logger.info("✅ Generated OCR context markdown")
                         except Exception as _e:
-                            logger.warning("⚠️ Failed to build OCR context markdown: %s", _e)
+                            logger.warning(f"⚠️ Failed to build OCR context markdown: {_e}")
                 except Exception as e:
-                    logger.warning("⚠️ OCR on aligned windows failed; continuing with ASR-only OCR: %s", e)
+                    logger.warning(f"⚠️ OCR processing failed: {e}")
+            elif do_ocr:
+                logger.info("ℹ️ OCR requested but OCRProcessor not available")
         else:
-            logger.info("ℹ️ No aligned seg_pairs produced; will use ASR-only segments.")
-
-        # If aligned windows produced nothing (or were absent), fall back to ASR-only *per-line* segments.
-        # (Still *no* legacy 5-min windows.)
+            logger.info("ℹ️ No aligned seg_pairs; using ASR-only segments")
+        
+        # If aligned windows produced nothing, fall back to ASR-only per-line segments
         if not audio_windows_for_qa:
+            logger.info("📊 Using ASR-only segments as audio windows...")
             audio_windows_for_qa = [
                 {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
                 for seg in segs_raw
                 if seg.get("text")
             ]
-
+            logger.info(f"✅ Created {len(audio_windows_for_qa)} ASR-only windows")
+        
+        # ============= STAGE 5: FINAL SUMMARY =============
         elapsed = time.time() - t0
-        logger.info(
-            "✅ ASR-first pipeline complete: audio_windows=%d, ocr_segments=%d in %.1fs",
-            len(audio_windows_for_qa), len(ocr_filtered), elapsed
-        )
-
+        
+        logger.info("=" * 60)
+        logger.info("✅ ASR PROCESSING COMPLETE")
+        logger.info(f"⏱️ Total processing time: {elapsed:.1f} seconds")
+        logger.info(f"📊 Audio windows: {len(audio_windows_for_qa)}")
+        logger.info(f"📊 OCR segments: {len(ocr_filtered)}")
+        logger.info(f"🎮 GPU used: {'Yes' if cuda_available else 'No (CPU only)'}")
+        logger.info(f"📁 Cache directory: {asr_cache_dir}")
+        logger.info("=" * 60)
+        
         return {
             "success": True,
-            "audio_segments": audio_windows_for_qa,        # canonical QA audio windows (aligned if available; else per-line ASR)
+            "audio_segments": audio_windows_for_qa,
             "audio_segments_used": audio_windows_for_qa,
-            "audio_segments_raw": segs_raw,                # per-line ASR
-            "ocr_segments": ocr_filtered,                  # may be []
-            "ocr_segments_filtered": ocr_filtered,         # may be []
-            "ocr_segments_raw": ocr_raw,                   # may be []
-            "ocr_context_markdown": ocr_context_md,        # may be ""
+            "audio_segments_raw": segs_raw,
+            "ocr_segments": ocr_filtered,
+            "ocr_segments_filtered": ocr_filtered,
+            "ocr_segments_raw": ocr_raw,
+            "ocr_context_markdown": ocr_context_md,
             "processing_time": elapsed,
             "method": "chapter_llama_asr_aligned" if seg_pairs else "chapter_llama_asr_asr_only",
             "asr_cache_dir": str(asr_cache_dir),
             "asr_file": str(asr_file),
             "duration": duration,
-
-            # >>> propagate VAD coverage (may be None if metrics missing)
+            "gpu_used": cuda_available,
             "speech_duration": speech_duration,
             "removed_duration": removed_duration,
             "speech_ratio": speech_ratio,
             "removed_ratio": removed_ratio,
         }
-
+        
     except Exception as e:
-        logger.error("❌ chapter_llama ASR failed: %s", e, exc_info=True)
+        logger.error("=" * 60)
+        logger.error("❌ ASR PROCESSING FAILED")
+        logger.error(f"Error: {e}", exc_info=True)
+        logger.error("=" * 60)
+        
         return {
             "success": False,
             "audio_segments": [],
@@ -397,6 +601,7 @@ def chapter_llama_asr_processing_fn(video_path: str, window_sec: int = QA_WINDOW
             "method": "chapter_llama_asr",
             "error": str(e)
         }
+  
 
 # =============== Debug helper for prompt snapshot (local) ===============
 
@@ -656,48 +861,51 @@ def clean_old_uploads(max_age_hours=8):
 def process_video_task(self, play_url_or_path, video_info, num_questions=10, num_pages=3):
     file_path = None
     processing_start_time = time.time()
+    
+    logger.info("=" * 80)
+    logger.info("🚀 NEW VIDEO PROCESSING JOB STARTED")
+    logger.info("=" * 80)
+    logger.info(f"📋 Video Info: {json.dumps(video_info, indent=2)}")
+    logger.info(f"🔗 Input URL/Path: {play_url_or_path}")
+    logger.info(f"⏰ Start Time: {datetime.now().isoformat()}")
+    logger.info("=" * 80)
+    
     try:
-        logger.info("🚀 Starting video processing task (ASR + OCR aligner preferred)...")
-        logger.info(f"📋 Video info: {video_info}")
-
-        if not DISABLE_RUNPOD_CHECK and RUNPOD_POD_ID:
-            status = get_pod_status()
-            if status != "RUNNING":
-                logger.warning("❗ RunPod GPU not ready. Retrying task in 20 mins...")
-                start_pod()
-                raise self.retry(exc=Exception("RunPod not available"))
-        else:
-            logger.info("⏭️ Skipping RunPod readiness check (disabled or no pod id).")
-
-        # Locate/download media
+        # Stage 1: Download/Locate Video
+        logger.info("\n" + "="*60)
+        logger.info("📥 STAGE 1: VIDEO ACQUISITION")
+        logger.info("="*60)
+        
         if isinstance(play_url_or_path, str) and play_url_or_path.startswith("file://"):
             file_path = play_url_or_path.replace("file://", "")
             logger.info(f"📂 Using local file: {file_path}")
+            if os.path.exists(file_path):
+                size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                logger.info(f"✅ Local file exists: {size_mb:.2f} MB")
+            else:
+                logger.error(f"❌ Local file NOT FOUND: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
         elif isinstance(play_url_or_path, str):
+            logger.info("🌐 Downloading video from URL...")
             file_path = download_video(play_url_or_path, f"{uuid.uuid4()}.mp4")
         else:
-            raise ValueError("play_url_or_path must be a string URL or file:// path")
-
-        if not video_info.get("CreatedAt"):
-            video_info["CreatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        # ---- Process via chapter_llama SingleVideo (ASR + Aligner OCR if enabled) ----
-        logger.info("🎯 Running SingleVideo → ASR → (OCR via aligner if enabled)...")
+            raise ValueError("Invalid input: must be URL or file:// path")
+        
+        # Stage 2: ASR Processing
+        logger.info("\n" + "="*60)
+        logger.info("🎤 STAGE 2: ASR TRANSCRIPTION")
+        logger.info("="*60)
+        
         processing_result = chapter_llama_asr_processing_fn(
             file_path,
             window_sec=QA_WINDOW_SEC,
             do_ocr=ENABLE_OCR
         )
-
+        
         if not processing_result.get("success"):
-            logger.error("❌ Processing failed")
-            post_to_client_api({
-                "success": False,
-                "error": "Video processing failed completely",
-                "video_info": video_info,
-                "processing_time": time.time() - processing_start_time,
-            })
-            return
+            logger.error("❌ ASR PROCESSING FAILED")
+            logger.error(f"Error: {processing_result.get('error')}")
+            # Continue with rest of error handling...
 
         # ---- Video Chaptering ----
         logger.info("📑 Generating video chapters...")
