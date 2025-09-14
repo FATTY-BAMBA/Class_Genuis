@@ -81,7 +81,8 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
     WHISPER_CACHE=/workspace/models \
     CTRANSLATE2_CACHE=/workspace/models \
     TOKENIZERS_PARALLELISM=false \
-    OMP_NUM_THREADS=1
+    OMP_NUM_THREADS=1 \
+    RUNPOD_DEBUG_ENABLED=${RUNPOD_DEBUG_ENABLED:-false}
 
 WORKDIR /app
 
@@ -99,9 +100,10 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     && apt-get clean; \
     fi
 
-# Install only runtime dependencies
+# Install runtime dependencies including aria2 and debugging tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 curl \
+    ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
+    curl aria2 netcat-openbsd procps net-tools lsof \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -113,17 +115,20 @@ RUN find /usr/local -name "*.pyc" -delete \
 # Copy application code only (no need to install anything)
 COPY . .
 
+# Make start script executable
 RUN chmod +x /app/start.sh
 
+# Create user and directories with proper permissions
 RUN useradd -ms /bin/bash appuser && \
-    mkdir -p /app/uploads /app/segments /workspace && \
+    mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
     chown -R appuser:appuser /app /workspace
 
 USER appuser
 
 EXPOSE 5000 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
-    CMD curl -sf http://localhost:5000/healthz || exit 1
+# More robust health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD curl -f http://localhost:5000/healthz || exit 1
     
 CMD ["./start.sh"]
