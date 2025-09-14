@@ -30,6 +30,10 @@ export CELERY_MAX_TASKS_PER_CHILD=${CELERY_MAX_TASKS_PER_CHILD:-0}
 export CELERY_LEAN=${CELERY_LEAN:-false}
 export LOG_LEVEL=${LOG_LEVEL:-INFO}
 
+# Suppress PaddlePaddle warnings
+export GLOG_minloglevel=2
+export GLOG_logtostderr=0
+
 mkdir -p /workspace/logs
 
 echo "========= CUDA / GPU ========="
@@ -119,69 +123,91 @@ cleanup() {
     PID=$(cat /tmp/celery.pid || true)
     [[ -n "${PID}" ]] && kill -TERM "${PID}" 2>/dev/null || true
   fi
+  if [[ "${TAIL_PID:-}" != "" ]]; then
+    kill -TERM "${TAIL_PID}" 2>/dev/null || true
+  fi
   if [[ "${REDIS_STARTED_LOCALLY}" == "1" ]]; then
     redis-cli -u "${REDIS_URL}" shutdown || true
   fi
 }
 trap cleanup EXIT INT TERM
 
-# ---------- start Celery (stdout -> tee -> file) ----------
+# ---------- start Celery with VISIBLE LOGS ----------
 echo "Starting Celery worker..."
-stdbuf -oL -eL celery -A tasks.tasks:celery worker "${CELERY_COMMON_OPTS[@]}" --pidfile=/tmp/celery.pid \
-  2>&1 | tee -a /workspace/logs/celery.log &
-sleep 2
+
+# Start Celery and save to log file while also showing output
+celery -A tasks.tasks:celery worker "${CELERY_COMMON_OPTS[@]}" --pidfile=/tmp/celery.pid 2>&1 | \
+    while IFS= read -r line; do
+        # Skip PaddlePaddle warnings
+        if [[ ! "$line" =~ "Fail to fscanf" ]] && [[ ! "$line" =~ "default_variables.cpp" ]]; then
+            echo "$line"
+            echo "$line" >> /workspace/logs/celery.log
+        fi
+    done &
+
+CELERY_BG_PID=$!
+sleep 3
+
+# Get actual Celery PID
 CELERY_PID=$(cat /tmp/celery.pid 2>/dev/null || echo "")
 echo "Celery PID: ${CELERY_PID:-unknown}"
 
-# ---------- start Gunicorn (stdout -> tee -> file) ----------
+# ---------- start Gunicorn ----------
 echo "Starting Gunicorn server..."
 echo "Binding to 0.0.0.0:5000"
-stdbuf -oL -eL gunicorn app.app:app \
+
+# Start Gunicorn with cleaner output
+gunicorn app.app:app \
   -b 0.0.0.0:5000 \
   --workers 1 \
   --threads 4 \
   --timeout 600 \
   --graceful-timeout 60 \
-  --access-logfile - \
-  --error-logfile  - \
+  --access-logfile /workspace/logs/gunicorn.log \
+  --error-logfile /workspace/logs/gunicorn.log \
   --pid /tmp/gunicorn.pid \
-  2>&1 | tee -a /workspace/logs/gunicorn.log &
+  --daemon
+
 sleep 2
 GUNICORN_PID=$(cat /tmp/gunicorn.pid 2>/dev/null || echo "")
 echo "Gunicorn PID: ${GUNICORN_PID:-unknown}"
 
-# Debug: Show what's running
+# Show running processes
+echo ""
 echo "Current running processes:"
 ps aux | grep -E "(gunicorn|celery|redis)" | grep -v grep
+echo ""
 
-# Wait longer before checking if processes are running
+# Wait and verify processes started
 sleep 5
 
-# Check if processes are still running
+# Check if processes are running
 if ! kill -0 $GUNICORN_PID 2>/dev/null; then
-    echo "ERROR: Gunicorn process is not running. Checking logs..."
-    tail -20 /workspace/logs/gunicorn.log
+    echo "ERROR: Gunicorn process is not running"
+    cat /workspace/logs/gunicorn.log 2>/dev/null | tail -20
     exit 1
 fi
 
 if ! kill -0 $CELERY_PID 2>/dev/null; then
-    echo "ERROR: Celery process is not running. Checking logs..."
-    tail -20 /workspace/logs/celery.log
+    echo "ERROR: Celery process is not running"
     exit 1
 fi
 
-# Extra check for port binding
+# Verify port is listening
 if ! netstat -tlnp 2>/dev/null | grep -q ":5000"; then
     echo "WARNING: Port 5000 doesn't appear to be listening"
-    echo "Checking with lsof:"
-    lsof -i :5000 || true
 fi
 
-echo "All services started successfully. Application running on http://0.0.0.0:5000"
-echo "Monitoring processes..."
+echo "============================================"
+echo "✅ All services started successfully"
+echo "📍 Application: http://0.0.0.0:5000"
+echo "📋 Logs: /workspace/logs/"
+echo "============================================"
+echo ""
+echo "📊 Monitoring Celery output (filtered)..."
+echo "Press Ctrl+C to stop monitoring"
+echo "============================================"
+echo ""
 
-# ---------- supervise ----------
-wait -n
-STATUS=$?
-echo "A service exited (status=${STATUS})."
-exit "${STATUS}"
+# Keep the script running and show Celery output
+wait $CELERY_BG_PID
