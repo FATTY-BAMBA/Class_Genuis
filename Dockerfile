@@ -125,7 +125,7 @@ RUN useradd -ms /bin/bash appuser && \
 
 USER appuser
 
-EXPOSE 5000 8000
+EXPOSE 5000 8888
 
 # More robust health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
