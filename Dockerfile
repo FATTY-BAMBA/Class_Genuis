@@ -82,7 +82,10 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
     CTRANSLATE2_CACHE=/workspace/models \
     TOKENIZERS_PARALLELISM=false \
     OMP_NUM_THREADS=1 \
-    RUNPOD_DEBUG_ENABLED=${RUNPOD_DEBUG_ENABLED:-false}
+    RUNPOD_DEBUG_ENABLED=${RUNPOD_DEBUG_ENABLED:-false} \
+    GLOG_minloglevel=2 \
+    GLOG_logtostderr=0 \
+    FLAGS_fraction_of_gpu_memory_to_use=0.9
 
 WORKDIR /app
 
