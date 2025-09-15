@@ -26,9 +26,7 @@ RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
-        libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev && \
-    # Add these new dependencies here
-    apt-get install -y --no-install-recommends \
+        libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev \
         libopenblas-dev libssl-dev && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
@@ -48,19 +46,10 @@ RUN python -m pip install \
         meson-python==0.15.0 \
         ninja==1.11.1
 
-# ---- Two-pass pip install with BuildKit cache mount -------------------------
-# 1st pass: download wheels / compile without deps (prevents conflicts)
-# 2nd pass: resolve full dependency tree
+# ---- Install all requirements with single pass -------------------------
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
-    python -m pip install --no-cache-dir -r /tmp/requirements.txt
-    
-# ---- strip executable-stack bit from the shipped wheel -----------------
-RUN apt-get update && apt-get install -y --no-install-recommends execstack && \
-    execstack --clear-execstack \
-      $(python -c "import ctranslate2, pathlib, glob; \
-                   print(glob.glob(str(pathlib.Path(ctranslate2.__file__).parent/'*_ext*.so'))[0])") && \
-    apt-get purge -y execstack && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    PIP_DEFAULT_TIMEOUT=1200 python -m pip install \
+    --no-cache-dir -r /tmp/requirements.txt
     
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
