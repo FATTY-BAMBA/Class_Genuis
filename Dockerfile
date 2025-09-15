@@ -37,9 +37,6 @@ ENV PIP_CONSTRAINT=/tmp/constraints.txt
 # ---- Python packaging tooling (pinned for reproducibility) -----------------
 RUN python -m pip install --upgrade pip==24.0 setuptools wheel
 
-# ---- Copy dependency lists early for maximum cache hit -----------------------
-COPY requirements.txt constraints.txt /tmp/
-
 # ---- Core build helpers ------------------------------------------------------
 RUN python -m pip install \
         packaging>=20.0 \
