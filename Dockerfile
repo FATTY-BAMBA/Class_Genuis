@@ -54,7 +54,14 @@ RUN python -m pip install \
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
-
+    
+# ---- strip executable-stack bit from the shipped wheel -----------------
+RUN apt-get update && apt-get install -y --no-install-recommends execstack && \
+    execstack --clear-execstack \
+      $(python -c "import ctranslate2, pathlib, glob; \
+                   print(glob.glob(str(pathlib.Path(ctranslate2.__file__).parent/'*_ext*.so'))[0])") && \
+    apt-get purge -y execstack && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
 
