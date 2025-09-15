@@ -1025,8 +1025,29 @@ def process_video_task(self, play_url_or_path, video_info, num_questions=10, num
             pass
 
         # Read the raw ASR text from the file that was already saved
-        with open(asr_file_path, 'r', encoding='utf-8') as f:
-            raw_asr_text = f.read()
+        # ---- NEW: safe ASR-text load ------------------------------------------
+        raw_asr_text = ""
+        asr_file_path = processing_result.get("asr_file") 
+
+        if asr_file_path and Path(asr_file_path).is_file():
+            logger.info(f"📝 ASR file claimed: {asr_file_path}")
+            logger.info(f"📄 ASR file size: {Path(asr_file_path).stat().st_size:,} bytes")
+
+            # peek at first 3 lines for quick sanity check
+            with open(asr_file_path, encoding="utf-8") as f:
+                raw_asr_text = f.read()
+                peek = "\n".join(raw_asr_text.splitlines()[:3])
+                logger.info("🧪 ASR peek (first 3 lines):\n%s", peek or "<empty>")
+        else:
+            logger.warning("⚠️ No usable asr_file; falling back to segments")
+            audio_segs = processing_result.get("audio_segments", [])
+            raw_asr_text = "\n".join(
+                f"{sec_to_hms(int(s.get('start', 0)))}: {s.get('text','')}".strip()
+                for s in audio_segs if s.get("text")
+            )
+            if not raw_asr_text:
+                raise RuntimeError("ASR stage failed and no segments available for fallback")
+              # -----------------------------------------------------------------------
 
         chaptering_result = generate_chapters(
             raw_asr_text=raw_asr_text,   # raw ASR string
