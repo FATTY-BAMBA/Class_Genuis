@@ -46,20 +46,31 @@ RUN python -m pip install \
         meson-python==0.15.0 \
         ninja==1.11.1
 
-# ---- Install all requirements with single pass -------------------------
+# ---- Two-pass pip install with BuildKit cache mount -------------------------
 RUN --mount=type=cache,target=/root/.cache/pip \
-    PIP_DEFAULT_TIMEOUT=1200 python -m pip install \
-    --no-cache-dir -r /tmp/requirements.txt
-    
+    python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
+    python -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+# ---- strip executable-stack bit from the shipped wheel -----------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget && \
+    # pull last execstack build that still exists
+    wget -q http://snapshot.debian.org/archive/debian/20221106T211106Z/pool/main/p/prelink/execstack_0.5.1-1_amd64.deb && \
+    dpkg -i execstack_0.5.1-1_amd64.deb && rm execstack_0.5.1-1_amd64.deb && \
+    execstack --clear-execstack \
+      $(python -c "import ctranslate2, pathlib, glob; \
+                   print(glob.glob(str(pathlib.Path(ctranslate2.__file__).parent/'*_ext*.so'))[0])") && \
+    apt-get purge -y wget && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
 
 # ---- PaddlePaddle GPU or CPU -------------------------------------------------
 RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
-        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html  \
             paddlepaddle-gpu==${PADDLE_VERSION_GPU}; \
     else \
-        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html  \
             paddlepaddle==${PADDLE_VERSION_CPU}; \
     fi
 
@@ -100,10 +111,10 @@ WORKDIR /app
 RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
         apt-get update && \
         apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub  \
             | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
-            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/  /" \
             > /etc/apt/sources.list.d/nvidia-cuda.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
