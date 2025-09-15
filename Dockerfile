@@ -9,7 +9,7 @@ FROM python:3.10-slim AS builder
 ARG PADDLE_VERSION_GPU=2.6.1
 ARG PADDLE_VERSION_CPU=2.6.1
 ARG PYCAIRO_VERSION=1.26.1
-ARG BUILD_VARIANT=gpu
+ARG BUILD_VARIANT=gpu  
 
 # ---- Build-time environment --------------------------------------------------
 ENV LANG=C.UTF-8 \
