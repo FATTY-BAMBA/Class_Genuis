@@ -70,9 +70,8 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
             paddlepaddle==${PADDLE_VERSION_CPU}; \
     fi
 
-# ---- use pre-built Polygon3 wheel (no compiler needed) ----------------------
-RUN pip install --no-cache-dir \
-    https://files.pythonhosted.org/packages/3c/50/9d1b6d6d7f6e6e9e9e9e9e9e9e9e9e9e9e/Polygon3-3.0.9.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+# ---- Install Polygon3 (let pip find the wheel) ----------------------
+RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
 # ---- PaddleOCR --------------------------------------------------------------
 RUN python -m pip install --no-cache-dir paddleocr==2.6.1
