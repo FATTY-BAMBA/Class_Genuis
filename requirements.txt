@@ -6,6 +6,11 @@ requests==2.32.3
 pycairo>=1.24.0,<1.29
 
 # ==================== AI/NLP ====================
+# PyTorch GPU (CUDA 11.8 wheels)
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+
 openai==1.55.3
 azure-ai-inference  # <--- ADDED THE MISSING AZURE LIBRARY
 faster-whisper==1.0.0.post1
