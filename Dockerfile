@@ -51,16 +51,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
-# ---- strip executable-stack bit from the shipped wheel -----------------
+# ---- rebuild ctranslate2 without exec-stack (production-safe) --------------
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends wget && \
-    # pull last execstack build that still exists
-    wget -q http://snapshot.debian.org/archive/debian/20221106T211106Z/pool/main/p/prelink/execstack_0.5.1-1_amd64.deb && \
-    dpkg -i execstack_0.5.1-1_amd64.deb && rm execstack_0.5.1-1_amd64.deb && \
-    execstack --clear-execstack \
-      $(python -c "import ctranslate2, pathlib, glob; \
-                   print(glob.glob(str(pathlib.Path(ctranslate2.__file__).parent/'*_ext*.so'))[0])") && \
-    apt-get purge -y wget && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ && \
+    pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
+    apt-get purge -y build-essential cmake git gcc g++ && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
