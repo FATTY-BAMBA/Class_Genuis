@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+
 # ---- Stage 1: The Builder ----
 FROM python:3.10-slim AS builder
 
@@ -12,7 +13,7 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 PIP_DEFAULT_TIMEOUT=600
 
-# Install system dependencies, including a modern Node.js for visualdl build
+# System deps (Node used by visualdl build)
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends \
@@ -22,7 +23,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Upgrade pip in the global environment of this stable image
+# Upgrade pip tooling
 RUN python -m pip install --upgrade pip setuptools wheel
 
 # Copy requirements early to leverage Docker cache
@@ -30,7 +31,7 @@ COPY requirements.txt /tmp/requirements.txt
 COPY constraints.txt /tmp/constraints.txt
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
 
-# Install core dependencies first (these are stable and less likely to conflict)
+# Core build tools
 RUN python -m pip install \
     "packaging>=20.0" \
     "Cython==3.0.10" \
@@ -39,17 +40,21 @@ RUN python -m pip install \
     "meson-python==0.15.0" \
     "ninja==1.11.1"
 
-# Install main application requirements
-# IMPORTANT: Don't delete /tmp/* yet as constraints.txt is still needed
+# ---- Explicit PyTorch CUDA 11.8 wheels (keep in sync with final-stage runtime) ----
+RUN python -m pip install --no-cache-dir \
+    torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install main application requirements (Torch already satisfied)
 RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm -rf ~/.cache/pip \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
-# Install visualdl directly from PyPI
+# visualdl
 RUN python -m pip install "visualdl==2.5.3"
 
-# Install paddlepaddle for the specified variant (CPU/GPU)
+# PaddlePaddle (GPU/CPU variant)
 ARG BUILD_VARIANT=gpu
 RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle-gpu==${PADDLE_VERSION_GPU}"; \
@@ -57,13 +62,12 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
       python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle==${PADDLE_VERSION_CPU}"; \
     fi
 
-# Install paddleocr
+# PaddleOCR
 RUN python -m pip install "paddleocr==2.6.1" \
     && find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
-# NOW we can clean up /tmp/* after all pip installs are done
-# Also unset PIP_CONSTRAINT since we're done with it
+# Cleanup builder
 RUN rm -rf /tmp/* \
     && rm -rf ~/.cache \
     && apt-get autoremove -y \
@@ -89,7 +93,7 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
 
 WORKDIR /app
 
-# --- SURGICALLY ADD NVIDIA CUDA RUNTIME LIBRARIES ---
+# --- Add NVIDIA CUDA 11.8 runtime libs to match torch cu118 wheels ---
 ARG BUILD_VARIANT=gpu
 RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     apt-get update && apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
@@ -103,25 +107,25 @@ RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
     && apt-get clean; \
     fi
 
-# Install runtime dependencies including aria2 and debugging tools
+# Runtime deps & debug tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
     curl aria2 netcat-openbsd procps net-tools lsof \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy the entire Python environment from the builder stage with cleanup
+# Bring Python env from builder
 COPY --from=builder /usr/local/ /usr/local/
 RUN find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
 
-# Copy application code only (no need to install anything)
+# App code
 COPY . .
 
-# Make start script executable
+# Start script
 RUN chmod +x /app/start.sh
 
-# Create user and directories with proper permissions
+# User & dirs
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
     chown -R appuser:appuser /app /workspace
@@ -130,8 +134,8 @@ USER appuser
 
 EXPOSE 5000 8888
 
-# More robust health check
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
-    
+
 CMD ["./start.sh"]
