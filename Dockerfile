@@ -115,7 +115,7 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub  \
             | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
-            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/s /" \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/  /" \
             > /etc/apt/sources.list.d/nvidia-cuda.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
@@ -127,7 +127,7 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
-Two-pass pip       curl aria2 netcat-openbsd procps net-tools lsof && \
+        curl aria2 netcat-openbsd procps net-tools lsof && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
@@ -141,7 +141,7 @@ RUN chmod +x /app/start.sh
 
 # ---- Non-root user & directories ---------------------------------------------
 RUN useradd -ms /bin/bash appuser && \
-Two-pass pip     mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
+    mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
     chown -R appuser:appuser /app /workspace
 USER appuser
 
