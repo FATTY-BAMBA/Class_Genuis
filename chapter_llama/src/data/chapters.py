@@ -3,25 +3,65 @@ from pathlib import Path
 
 # --- begin lutils compatibility shim ---
 try:
-    from lutils import openf, writef  # type: ignore[attr-defined]
+    from lutils import openf as _openf, writef as _writef  # type: ignore[attr-defined]
+    openf, writef = _openf, _writef
 except Exception:
+    import json
     from pathlib import Path
     from typing import Union
+
     PathLike = Union[str, Path]
 
     def _ensure_parent(p: PathLike):
         Path(p).parent.mkdir(parents=True, exist_ok=True)
 
     def openf(p: PathLike, mode: str = "r", encoding: str = "utf-8"):
+        """
+        Reads JSON as Python objects for *.json files; returns text for others.
+        Writing modes still return an open handle if you really need that.
+        """
+        p = Path(p)
         if any(x in mode for x in ("w", "a", "+")):
             _ensure_parent(p)
-        return open(p, mode, encoding=encoding)
+            return open(p, mode, encoding=encoding) if "b" not in mode else open(p, mode)
+        if "b" in mode:
+            return open(p, mode)
+        if p.suffix.lower() == ".json":
+            with open(p, "r", encoding=encoding) as f:
+                return json.load(f)
+        with open(p, "r", encoding=encoding) as f:
+            return f.read()
 
-    def writef(p: PathLike, data: str, encoding: str = "utf-8"):
+    def writef(*args, encoding: str = "utf-8"):
+        """
+        Supports both orders:
+          - writef(data, path)
+          - writef(path, data)
+        Writes JSON when data is list/dict or path ends with .json.
+        """
+        if len(args) != 2:
+            raise TypeError("writef expects (data, path) or (path, data)")
+        a, b = args
+        if isinstance(b, (str, Path)):
+            data, p = a, Path(b)
+        else:
+            p, data = Path(a), b
+
         _ensure_parent(p)
+
+        if isinstance(data, (dict, list)) or p.suffix.lower() == ".json":
+            with open(p, "w", encoding=encoding) as f:
+                json.dump(data, f, ensure_ascii=False)
+            return p
+
+        if isinstance(data, (bytes, bytearray)):
+            with open(p, "wb") as f:
+                f.write(data)
+            return p
+
         with open(p, "w", encoding=encoding) as f:
-            f.write(data)
-        return Path(p)
+            f.write(str(data))
+        return p
 # --- end lutils compatibility shim ---
 
 class Chapters:
