@@ -1,85 +1,88 @@
 # syntax=docker/dockerfile:1
 
-# ---- Stage 1: The Builder ----
+# ------------------------------------------------------------------
+# Stage 1 – Builder: compile everything once, keep the final image slim
+# ------------------------------------------------------------------
 FROM python:3.10-slim AS builder
 
-# Set ARGs and ENV vars needed for the build
+# ---- Build-time arguments ----------------------------------------------------
 ARG PADDLE_VERSION_GPU=2.6.1
 ARG PADDLE_VERSION_CPU=2.6.1
 ARG PYCAIRO_VERSION=1.26.1
+ARG BUILD_VARIANT=gpu
 
-ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+# ---- Build-time environment --------------------------------------------------
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 PIP_DEFAULT_TIMEOUT=600
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=1200 \
+    PIP_CONSTRAINT=/tmp/constraints.txt
 
-# System deps (Node used by visualdl build)
+# ---- System dependencies (Node needed by VisualDL) ---------------------------
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends \
-    nodejs build-essential cmake git wget curl \
-    libcairo2-dev libjpeg-dev libgif-dev pkg-config \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+        nodejs build-essential cmake git wget curl \
+        libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Upgrade pip tooling
-RUN python -m pip install --upgrade pip setuptools wheel
+# ---- Python packaging tooling (pinned for reproducibility) -----------------
+RUN python -m pip install --upgrade pip==24.0 setuptools wheel
 
-# Copy requirements early to leverage Docker cache
-COPY requirements.txt /tmp/requirements.txt
-COPY constraints.txt /tmp/constraints.txt
-ENV PIP_CONSTRAINT=/tmp/constraints.txt
+# ---- Copy dependency lists early for maximum cache hit -----------------------
+COPY requirements.txt constraints.txt /tmp/
 
-# Core build tools
+# ---- Core build helpers ------------------------------------------------------
 RUN python -m pip install \
-    "packaging>=20.0" \
-    "Cython==3.0.10" \
-    "pybind11==2.12.0" \
-    "meson==1.2.3" \
-    "meson-python==0.15.0" \
-    "ninja==1.11.1"
+        packaging>=20.0 \
+        Cython==3.0.10 \
+        pybind11==2.12.0 \
+        meson==1.2.3 \
+        meson-python==0.15.0 \
+        ninja==1.11.1
 
-# ---- Explicit PyTorch CUDA 11.8 wheels (keep in sync with final-stage runtime) ----
-RUN python -m pip install --no-cache-dir \
-    torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 \
-    --index-url https://download.pytorch.org/whl/cu118
+# ---- Two-pass pip install with BuildKit cache mount -------------------------
+# 1st pass: download wheels / compile without deps (prevents conflicts)
+# 2nd pass: resolve full dependency tree
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
+    python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Install main application requirements (Torch already satisfied)
-RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm -rf ~/.cache/pip \
-    && find /usr/local -name "*.pyc" -delete \
-    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
+# ---- VisualDL (not in requirements.txt) -------------------------------------
+RUN python -m pip install --no-cache-dir visualdl==2.5.3
 
-# visualdl
-RUN python -m pip install "visualdl==2.5.3"
-
-# PaddlePaddle (GPU/CPU variant)
-ARG BUILD_VARIANT=gpu
-RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
-      python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle-gpu==${PADDLE_VERSION_GPU}"; \
+# ---- PaddlePaddle GPU or CPU -------------------------------------------------
+RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+            paddlepaddle-gpu==${PADDLE_VERSION_GPU}; \
     else \
-      python -m pip install --prefer-binary -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html "paddlepaddle==${PADDLE_VERSION_CPU}"; \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+            paddlepaddle==${PADDLE_VERSION_CPU}; \
     fi
 
-# PaddleOCR
-RUN python -m pip install "paddleocr==2.6.1" \
-    && find /usr/local -name "*.pyc" -delete \
-    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
+# ---- PaddleOCR --------------------------------------------------------------
+RUN python -m pip install --no-cache-dir paddleocr==2.6.1
 
-# Cleanup builder
-RUN rm -rf /tmp/* \
-    && rm -rf ~/.cache \
-    && apt-get autoremove -y \
-    && apt-get autoclean
-ENV PIP_CONSTRAINT=
+# ---- Final clean-up in builder ----------------------------------------------
+RUN find /usr/local -type f -name "*.pyc" -delete && \
+    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf /tmp/* /root/.cache /var/cache/apt/*
 
-# ---- Stage 2: The Final Image ----
+# ------------------------------------------------------------------
+# Stage 2 – Runtime: minimal footprint, only runtime libs
+# ------------------------------------------------------------------
 FROM python:3.10-slim AS final
 
-ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+ARG BUILD_VARIANT=gpu
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     TZ=Asia/Taipei \
     HF_HOME=/workspace/models \
     WHISPER_CACHE=/workspace/models \
@@ -93,48 +96,46 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
 
 WORKDIR /app
 
-# --- Add NVIDIA CUDA 11.8 runtime libs to match torch cu118 wheels ---
-ARG BUILD_VARIANT=gpu
-RUN if [ "${BUILD_VARIANT}" = "gpu" ]; then \
-    apt-get update && apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" > /etc/apt/sources.list.d/nvidia-cuda.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    cuda-cudart-11-8 \
-    libcudnn8=8.9.7.29-1+cuda11.8 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean; \
+# ---- CUDA 11.8 runtime (GPU variant only) -----------------------------------
+RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub \
+            | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
+        echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
+            > /etc/apt/sources.list.d/nvidia-cuda.list && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            cuda-cudart-11-8 libcudnn8=8.9.7.29-1+cuda11.8 && \
+        rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
     fi
 
-# Runtime deps & debug tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
-    curl aria2 netcat-openbsd procps net-tools lsof \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# ---- Runtime dependencies & handy debug tools --------------------------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
+        curl aria2 netcat-openbsd procps net-tools lsof && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Bring Python env from builder
-COPY --from=builder /usr/local/ /usr/local/
-RUN find /usr/local -name "*.pyc" -delete \
-    && find /usr/local -name "__pycache__" -exec rm -rf {} + || true
+# ---- Copy entire Python environment from builder -----------------------------
+COPY --from=builder /usr/local /usr/local
+RUN find /usr/local -type f -name "*.pyc" -delete && \
+    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-# App code
+# ---- Application code --------------------------------------------------------
 COPY . .
-
-# Start script
 RUN chmod +x /app/start.sh
 
-# User & dirs
+# ---- Non-root user & directories ---------------------------------------------
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
     chown -R appuser:appuser /app /workspace
-
 USER appuser
 
 EXPOSE 5000 8888
 
-# Health check
+# ---- Health check ------------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
 
