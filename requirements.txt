@@ -8,8 +8,8 @@ pycairo>=1.24.0,<1.29
 # ==================== AI/NLP ====================
 openai==1.55.3
 azure-ai-inference  # <--- ADDED THE MISSING AZURE LIBRARY
-faster-whisper>=1.0.0,<1.2
-ctranslate2>=4.0,<5
+faster-whisper==1.0.0.post1
+ctranslate2==4.3.1
 
 # Hugging Face ecosystem - using ranges for compatibility
 transformers>=4.45,<4.57
