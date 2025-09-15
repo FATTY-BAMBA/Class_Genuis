@@ -55,10 +55,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
-# ---- Rebuild ctranslate2 from source with proper stack permissions ----------
-RUN PIP_CONSTRAINT= python -m pip uninstall -y ctranslate2 && \
-    PIP_CONSTRAINT= python -m pip install --no-binary ctranslate2 --no-cache-dir ctranslate2==4.4.0
-
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
 
