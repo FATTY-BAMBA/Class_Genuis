@@ -7,9 +7,9 @@
 packaging>=20.0
 
 # Torch stack (Dockerfile sets exact versions; these ranges are fine)
-torch>=2.2,<2.3
-torchvision>=0.17,<0.18
-torchaudio>=2.2,<2.3
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
 torchmetrics==1.4.2
 lightning==2.4.0
 
@@ -25,7 +25,6 @@ safetensors>=0.4.5
 openai==1.55.3
 faster-whisper==1.0.0.post1
 ctranslate2==4.3.1
-hdbscan==0.8.33
 google-generativeai==0.8.3
 rouge-score==0.1.2
 tabulate==0.9.0
