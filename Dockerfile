@@ -27,6 +27,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev && \
+    # Add these new dependencies here
+    apt-get install -y --no-install-recommends \
+        libopenblas-dev libssl-dev && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy dependency lists early for maximum cache hit -----------------------
@@ -51,6 +54,10 @@ RUN python -m pip install \
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+# ---- Rebuild ctranslate2 from source with proper stack permissions ----------
+RUN python -m pip uninstall -y ctranslate2 && \
+    python -m pip install --no-binary ctranslate2 --no-cache-dir ctranslate2==4.4.0
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
