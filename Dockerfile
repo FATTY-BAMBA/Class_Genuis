@@ -29,7 +29,6 @@ RUN apt-get update && \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-=============================================================================
 # ---- Copy dependency lists early for maximum cache hit -----------------------
 COPY requirements.txt constraints.txt /tmp/
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
