@@ -13,17 +13,16 @@ torchaudio==2.2.2
 torchmetrics==1.4.2
 lightning==2.4.0
 
-# HF ecosystem
-transformers==4.19.4
-tokenizers==0.15.2
+# HF ecosystem - These will be auto-resolved by faster-whisper
+# transformers==4.19.4  # Commented out - let pip resolve
+# tokenizers==0.15.2    # Commented out - let pip resolve
 sentencepiece>=0.2.0,<0.3
 accelerate>=1.1.1
 optimum>=1.22.0
 peft>=0.17.1
 safetensors>=0.4.5
-
 openai==1.55.3
-faster-whisper==0.10.1
+# faster-whisper==0.10.1  # Commented out - installed separately in Dockerfile
 google-generativeai==0.8.3
 rouge-score==0.1.2
 tabulate==0.9.0
@@ -40,7 +39,7 @@ imgaug==0.4.0
 attrdict==2.0.1
 beautifulsoup4==4.13.4
 fire==0.7.1
-fonttools==4.51.0  # Updated to match requirements
+fonttools==4.51.0
 lmdb==1.7.3
 openpyxl==3.1.5
 pdf2docx==0.5.8
@@ -49,10 +48,10 @@ rapidfuzz==3.13.0
 visualdl==2.5.3
 
 # Critical pins to avoid segfaults / ABI issues - ALIGNED WITH REQUIREMENTS
-numpy==1.26.4  # Must match requirements.txt
-PyMuPDF==1.19.0  # Must match paddleocr requirement
+numpy==1.26.4
+PyMuPDF==1.19.0
 python-docx==1.2.0
-protobuf>=3.20.0,<4  # More flexible than ==3.20.3
+protobuf>=3.20.0,<4
 
 # SciPy stack
 llvmlite==0.43.0
@@ -61,7 +60,7 @@ tqdm==4.67.1
 scipy==1.10.1
 scikit-learn==1.0.2
 scikit-image==0.21.0
-onnxruntime==1.15.1  # Changed from 1.19.2 to match builder stage
+onnxruntime==1.15.1
 
 # Background workers
 redis==6.0.0
