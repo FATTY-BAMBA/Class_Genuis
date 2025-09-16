@@ -9,7 +9,7 @@ FROM python:3.10-slim AS builder
 ARG PADDLE_VERSION_GPU=2.6.1
 ARG PADDLE_VERSION_CPU=2.6.1
 ARG PYCAIRO_VERSION=1.26.1
-ARG BUILD_VARIANT=gpu  
+ARG BUILD_VARIANT=gpu
 
 # ---- Build-time environment --------------------------------------------------
 ENV LANG=C.UTF-8 \
@@ -22,12 +22,13 @@ ENV LANG=C.UTF-8 \
     PIP_CONSTRAINT=/tmp/constraints.txt
 
 # ---- System dependencies (Node needed by VisualDL) ---------------------------
+# Added 'execstack' to fix the ctranslate2 library issue
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev \
-        libopenblas-dev libssl-dev && \
+        libopenblas-dev libssl-dev execstack && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy dependency lists early for maximum cache hit -----------------------
@@ -47,31 +48,30 @@ RUN python -m pip install \
         ninja==1.11.1
 
 # ---- Two-pass pip install with BuildKit cache mount -------------------------
+# This step installs dependencies from requirements.txt, including ctranslate2
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
-# ---- Install Polygon3 (MOVED) -----------------------------------------------
-# This must be installed BEFORE build-essential is purged in the ctranslate2 step
-# as it requires a compiler (gcc) to build from source.
+# ---- Install Polygon3 -------------------------------------------------------
+# This requires build-essential (installed above) to compile from source.
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- rebuild ctranslate2 without exec-stack (production-safe) --------------
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ && \
-    pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
-    apt-get purge -y build-essential cmake git gcc g++ && \
-    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+# ---- Fix ctranslate2 executable stack issue --------------------------------
+# The pre-compiled ctranslate2 library requires an executable stack, which is
+# blocked by modern Linux kernels. This command finds the library file and
+# removes the executable stack flag using the 'execstack' utility.
+RUN find /usr/local/lib/python3.10/site-packages/ctranslate2.libs/ -name "libctranslate2-*.so.*" -exec execstack -c {} \;
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
 
 # ---- PaddlePaddle GPU or CPU -------------------------------------------------
-RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
-        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html  \
+RUN if; then \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
             paddlepaddle-gpu==${PADDLE_VERSION_GPU}; \
     else \
-        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html  \
+        python -m pip install --no-cache-dir -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
             paddlepaddle==${PADDLE_VERSION_CPU}; \
     fi
 
@@ -79,9 +79,14 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 RUN python -m pip install --no-cache-dir paddleocr==2.6.1
 
 # ---- Final clean-up in builder ----------------------------------------------
-RUN find /usr/local -type f -name "*.pyc" -delete && \
-    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    rm -rf /tmp/* /root/.cache /var/cache/apt/*
+# Purge build-time dependencies to keep the final image smaller
+RUN apt-get purge -y build-essential cmake git && \
+    apt-get autoremove -y && \
+    find /usr/local -type f -name "*.pyc" -delete && \
+    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null |
+
+| true && \
+    rm -rf /tmp/* /root/.cache /var/lib/apt/lists/* /var/cache/apt/*
 
 # ------------------------------------------------------------------
 # Stage 2 – Runtime: minimal footprint, only runtime libs
@@ -109,13 +114,14 @@ ENV LANG=C.UTF-8 \
 WORKDIR /app
 
 # ---- CUDA 11.8 runtime (GPU variant only) -----------------------------------
-RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
+RUN if; then \
         apt-get update && \
         apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub  \
-            | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub \
+
+| gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
-            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/  /" \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
             > /etc/apt/sources.list.d/nvidia-cuda.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
@@ -133,10 +139,12 @@ RUN apt-get update && \
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
 RUN find /usr/local -type f -name "*.pyc" -delete && \
-    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null |
+
+| true
 
 # ---- Application code --------------------------------------------------------
-COPY . .
+COPY..
 RUN chmod +x /app/start.sh
 
 # ---- Non-root user & directories ---------------------------------------------
@@ -149,6 +157,8 @@ EXPOSE 5000 8888
 
 # ---- Health check ------------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD curl -f http://localhost:5000/healthz || exit 1
+    CMD curl -f http://localhost:5000/healthz |
+
+| exit 1
 
 CMD ["./start.sh"]
