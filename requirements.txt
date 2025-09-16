@@ -16,10 +16,12 @@ pycairo>=1.24.0,<1.29
 # ==================== AI / NLP ====================
 openai==1.55.3
 azure-ai-inference
-faster-whisper==0.10.1
-ctranslate2==3.24.0
-transformers==4.19.4
-tokenizers==0.15.2
+# These will be installed separately in Dockerfile to manage dependencies
+# faster-whisper==0.10.1
+# ctranslate2==3.24.0
+# transformers and tokenizers will be auto-resolved by faster-whisper
+# transformers==4.19.4
+# tokenizers==0.15.2
 sentencepiece>=0.2.0,<0.3
 torchmetrics>=1.4.0
 lightning>=2.4.0
