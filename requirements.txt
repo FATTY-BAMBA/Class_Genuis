@@ -17,7 +17,7 @@ pycairo>=1.24.0,<1.29
 openai==1.55.3
 azure-ai-inference
 faster-whisper==1.0.3
-ctranslate2==4.4.0
+ctranslate2==3.24.0
 transformers>=4.45,<4.57
 tokenizers>=0.22.0,<0.24
 sentencepiece>=0.2.0,<0.3
