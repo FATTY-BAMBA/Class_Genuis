@@ -14,7 +14,7 @@ torchmetrics==1.4.2
 lightning==2.4.0
 
 # HF ecosystem
-transformers>=4.45.1,<4.57
+transformers==4.19.4
 tokenizers==0.15.2
 sentencepiece>=0.2.0,<0.3
 accelerate>=1.1.1
