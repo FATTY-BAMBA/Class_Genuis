@@ -54,14 +54,21 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- rebuild ctranslate2 and fix executable stack issue --------------
+# ---- rebuild ctranslate2 and fix executable stack issue (Robust Method) ----
 RUN apt-get update && \
-    # FIX: The correct package is 'gprelink' for this version of Debian
-    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ gprelink && \
+    # Install apt-file, the tool that lets us find packages
+    apt-get install -y --no-install-recommends apt-file && \
+    apt-file update && \
+    # Find the package that provides the execstack command and save its name
+    EXECSTACK_PKG=$(apt-file search /usr/bin/execstack | cut -d: -f1) && \
+    echo "Found execstack utility in package: ${EXECSTACK_PKG}" && \
+    # Now, install all build tools, including the package we just found
+    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ "${EXECSTACK_PKG}" && \
     pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
+    # Run the find and execstack command to fix the library
     find /usr/local/lib -name "libctranslate2*.so*" -exec echo "Disabling exec-stack on {}" \; -exec execstack -c {} \; && \
-    # FIX: Also changed to 'gprelink' here for cleanup
-    apt-get purge -y build-essential cmake git gcc g++ gprelink && \
+    # Purge everything we installed for this step
+    apt-get purge -y build-essential cmake git gcc g++ "${EXECSTACK_PKG}" apt-file && \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
