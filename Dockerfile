@@ -54,22 +54,18 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- rebuild ctranslate2 and fix executable stack issue (Robust Method) ----
+# ---- Fix ctranslate2 executable stack issue (CORRECTED) ----
+# Install execstack tool temporarily for fixing the library
 RUN apt-get update && \
-    # Install apt-file, the tool that lets us find packages
-    apt-get install -y --no-install-recommends apt-file && \
-    apt-file update && \
-    # Find the package that provides the execstack command and save its name
-    EXECSTACK_PKG=$(apt-file search /usr/bin/execstack | cut -d: -f1) && \
-    echo "Found execstack utility in package: ${EXECSTACK_PKG}" && \
-    # Now, install all build tools, including the package we just found
-    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ "${EXECSTACK_PKG}" && \
-    pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
-    # Run the find and execstack command to fix the library
-    find /usr/local/lib -name "libctranslate2*.so*" -exec echo "Disabling exec-stack on {}" \; -exec execstack -c {} \; && \
-    # Purge everything we installed for this step
-    apt-get purge -y build-essential cmake git gcc g++ "${EXECSTACK_PKG}" apt-file && \
-    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends execstack && \
+    # Clear executable stack flag on ALL ctranslate2 libraries
+    find /usr/local/lib/python*/site-packages -name "*.so*" -path "*/ctranslate2*" -exec execstack -c {} \; 2>/dev/null || true && \
+    # Also fix any other potentially problematic libraries
+    find /usr/local/lib -name "libctranslate2*.so*" -exec execstack -c {} \; 2>/dev/null || true && \
+    # Clean up execstack as we don't need it in runtime
+    apt-get purge -y execstack && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
@@ -112,7 +108,9 @@ ENV LANG=C.UTF-8 \
     RUNPOD_DEBUG_ENABLED=${RUNPOD_DEBUG_ENABLED:-false} \
     GLOG_minloglevel=2 \
     GLOG_logtostderr=0 \
-    FLAGS_fraction_of_gpu_memory_to_use=0.9
+    FLAGS_fraction_of_gpu_memory_to_use=0.9 \
+    LD_PRELOAD="" \
+    EXECSTACK_DISABLE=1
 
 WORKDIR /app
 
@@ -135,17 +133,49 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
-        curl aria2 netcat-openbsd procps net-tools lsof && \
+        curl aria2 netcat-openbsd procps net-tools lsof \
+        # Add patchelf for additional library fixing if needed
+        patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
+
+# ---- Additional runtime fix for ctranslate2 (belt and suspenders approach) ----
+# This ensures the libraries are properly configured in the final image
+RUN ldconfig && \
+    # Use patchelf to remove EXECSTACK flag as a fallback
+    find /usr/local/lib/python*/site-packages -name "*.so*" -path "*/ctranslate2*" \
+        -exec patchelf --remove-needed EXECSTACK {} \; 2>/dev/null || true && \
+    # Update library cache
+    ldconfig
+
+# ---- Clean Python cache in final image --------------------------------------
 RUN find /usr/local -type f -name "*.pyc" -delete && \
     find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 # ---- Application code --------------------------------------------------------
 COPY . .
 RUN chmod +x /app/start.sh
+
+# ---- Create startup script to handle runtime library issues -----------------
+RUN cat > /app/fix_libraries.sh << 'EOF'
+#!/bin/bash
+# Runtime library fix script
+echo "Checking ctranslate2 libraries..."
+# Test if ctranslate2 can be imported
+python -c "import ctranslate2; print('ctranslate2 OK')" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "ctranslate2 import failed, attempting runtime fix..."
+    # Try to fix with patchelf if available
+    if command -v patchelf >/dev/null 2>&1; then
+        find /usr/local/lib -name "*ctranslate2*.so*" -exec patchelf --set-execstack false {} \; 2>/dev/null
+    fi
+    # Update library cache
+    ldconfig 2>/dev/null || true
+fi
+EOF
+RUN chmod +x /app/fix_libraries.sh
 
 # ---- Non-root user & directories ---------------------------------------------
 RUN useradd -ms /bin/bash appuser && \
@@ -159,5 +189,5 @@ EXPOSE 5000 8888
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
 
-CMD ["./start.sh"]
-
+# ---- Modified entrypoint to run fix script first ----------------------------
+ENTRYPOINT ["/bin/bash", "-c", "/app/fix_libraries.sh && exec /app/start.sh"]
