@@ -54,20 +54,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- Fix ctranslate2 executable stack issue using patchelf ----
+# ---- Fix ctranslate2 libraries in builder stage ----
 RUN echo "Fixing ctranslate2 libraries..." && \
-    # Find and fix all ctranslate2 shared libraries
-    for lib in $(find /usr/local -name "*.so*" | grep -E "ctranslate2|ctr"); do \
+    for lib in $(find /usr/local -name "*.so*" 2>/dev/null | grep -E "ctranslate2|ctr" || true); do \
         echo "Processing: $lib"; \
-        # Remove executable stack requirement
         patchelf --set-execstack false "$lib" 2>/dev/null || true; \
-        # Clear GNU_STACK if present
-        patchelf --remove-rpath "$lib" 2>/dev/null || true; \
-        patchelf --set-rpath '$ORIGIN' "$lib" 2>/dev/null || true; \
-    done && \
-    # Verify the fix by attempting import
-    python -c "import ctranslate2; print('ctranslate2 import successful')" || \
-    echo "Warning: ctranslate2 import test failed, will retry at runtime"
+    done
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
@@ -96,7 +88,7 @@ FROM python:3.10-slim AS final
 
 ARG BUILD_VARIANT=gpu
 
-# Add LD_LIBRARY_PATH fix for ctranslate2
+# Fix the LD_LIBRARY_PATH to include ctranslate2.libs directory
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
@@ -112,8 +104,8 @@ ENV LANG=C.UTF-8 \
     GLOG_minloglevel=2 \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
-    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
-    LD_PRELOAD=""
+    LD_LIBRARY_PATH=/usr/local/lib/python3.10/site-packages/ctranslate2.libs:/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH \
+    PYTHONPATH=/usr/local/lib/python3.10/site-packages:$PYTHONPATH
 
 WORKDIR /app
 
@@ -137,18 +129,32 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
         curl aria2 netcat-openbsd procps net-tools lsof \
-        # Add patchelf for runtime fixing
         patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
 
-# ---- Runtime library configuration -------------------------------------------
-RUN ldconfig && \
-    echo "/usr/local/lib" >> /etc/ld.so.conf.d/local.conf && \
-    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local.conf && \
-    ldconfig
+# ---- Setup ctranslate2 library paths properly --------------------------------
+RUN echo "Setting up ctranslate2 library paths..." && \
+    # Find ctranslate2.libs directory and create symlinks
+    if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then \
+        echo "Found ctranslate2.libs directory, creating symlinks..."; \
+        cd /usr/local/lib/python3.10/site-packages/ctranslate2.libs && \
+        for lib in *.so*; do \
+            if [ -f "$lib" ]; then \
+                echo "Linking $lib to /usr/local/lib/"; \
+                ln -sf "$(pwd)/$lib" "/usr/local/lib/$lib"; \
+            fi; \
+        done; \
+    fi && \
+    # Add the ctranslate2.libs directory to ld.so.conf
+    echo "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" > /etc/ld.so.conf.d/ctranslate2.conf && \
+    echo "/usr/local/lib" >> /etc/ld.so.conf.d/ctranslate2.conf && \
+    # Update library cache
+    ldconfig && \
+    # Verify the libraries are accessible
+    ls -la /usr/local/lib/python3.10/site-packages/ctranslate2.libs/ 2>/dev/null || echo "ctranslate2.libs not found yet"
 
 # ---- Clean Python cache in final image --------------------------------------
 RUN find /usr/local -type f -name "*.pyc" -delete && \
@@ -158,46 +164,54 @@ RUN find /usr/local -type f -name "*.pyc" -delete && \
 COPY . .
 RUN chmod +x /app/start.sh
 
-# ---- Create comprehensive startup script -------------------------------------
+# ---- Create a robust startup script for library fixing ----------------------
 RUN cat > /app/fix_libraries.sh << 'EOF'
 #!/bin/bash
 echo "=== Library Fix Script Starting ==="
 
-# Function to fix a single library
-fix_library() {
-    local lib="$1"
-    if [ -f "$lib" ]; then
-        echo "Fixing: $lib"
-        patchelf --set-execstack false "$lib" 2>/dev/null || true
-    fi
-}
+# Set the library path
+export LD_LIBRARY_PATH="/usr/local/lib/python3.10/site-packages/ctranslate2.libs:${LD_LIBRARY_PATH}"
 
-# Fix all ctranslate2 libraries
-echo "Scanning for ctranslate2 libraries..."
-for lib in $(find /usr/local -name "*.so*" 2>/dev/null | grep -E "ctranslate2|ctr" || true); do
-    fix_library "$lib"
-done
+# Ensure ctranslate2 libraries are linked
+if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then
+    echo "ctranslate2.libs directory found, ensuring links..."
+    cd /usr/local/lib/python3.10/site-packages/ctranslate2.libs
+    for lib in *.so*; do
+        if [ -f "$lib" ] && [ ! -f "/usr/local/lib/$lib" ]; then
+            ln -sf "$(pwd)/$lib" "/usr/local/lib/$lib" 2>/dev/null || true
+        fi
+    done
+    ldconfig 2>/dev/null || true
+    echo "Libraries in ctranslate2.libs:"
+    ls -la /usr/local/lib/python3.10/site-packages/ctranslate2.libs/
+fi
 
-# Update library cache
-ldconfig 2>/dev/null || true
-
-# Test import
+# Test import with proper error handling
 echo "Testing ctranslate2 import..."
 python -c "
+import sys
+import os
+
+# Ensure library path is set
+os.environ['LD_LIBRARY_PATH'] = '/usr/local/lib/python3.10/site-packages/ctranslate2.libs:' + os.environ.get('LD_LIBRARY_PATH', '')
+
 try:
     import ctranslate2
     print('✓ ctranslate2 import successful')
+    print(f'  Version: {ctranslate2.__version__}')
 except ImportError as e:
     print(f'✗ ctranslate2 import failed: {e}')
-    print('Attempting fallback fix...')
-    import os
-    os.environ['LD_PRELOAD'] = ''
-    try:
-        import ctranslate2
-        print('✓ ctranslate2 import successful with LD_PRELOAD cleared')
-    except:
-        print('✗ All ctranslate2 fixes failed')
-" || true
+    print('  Library search paths:')
+    print(f'    LD_LIBRARY_PATH: {os.environ.get(\"LD_LIBRARY_PATH\")}')
+    print('  Attempting to diagnose...')
+    import subprocess
+    result = subprocess.run(['ldd', '/usr/local/lib/python3.10/site-packages/ctranslate2/_ext.cpython-310-x86_64-linux-gnu.so'], 
+                          capture_output=True, text=True)
+    print('  Missing libraries:')
+    for line in result.stdout.split('\\n'):
+        if 'not found' in line:
+            print(f'    {line}')
+"
 
 echo "=== Library Fix Script Complete ==="
 EOF
@@ -218,4 +232,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
 
 # ---- Modified entrypoint to run fix script first ----------------------------
-ENTRYPOINT ["/bin/bash", "-c", "/app/fix_libraries.sh && exec /app/start.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "source /app/fix_libraries.sh && exec /app/start.sh"]
