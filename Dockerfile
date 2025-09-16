@@ -27,11 +27,15 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev \
-        libopenblas-dev libssl-dev patchelf && \
+        libopenblas-dev libssl-dev && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy dependency lists early for maximum cache hit -----------------------
 COPY requirements.txt constraints.txt /tmp/
+
+# Remove version constraints for ctranslate2 and faster-whisper from requirements
+RUN grep -v "ctranslate2\|faster-whisper" /tmp/requirements.txt > /tmp/requirements_filtered.txt || cp /tmp/requirements.txt /tmp/requirements_filtered.txt
+
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
 
 # ---- Python packaging tooling (pinned for reproducibility) -----------------
@@ -48,18 +52,20 @@ RUN python -m pip install \
 
 # ---- Two-pass pip install with BuildKit cache mount -------------------------
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
-    python -m pip install --no-cache-dir -r /tmp/requirements.txt
+    python -m pip install --no-deps --no-cache-dir -r /tmp/requirements_filtered.txt && \
+    python -m pip install --no-cache-dir -r /tmp/requirements_filtered.txt
 
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- Fix ctranslate2 libraries in builder stage ----
-RUN echo "Fixing ctranslate2 libraries..." && \
-    for lib in $(find /usr/local -name "*.so*" 2>/dev/null | grep -E "ctranslate2|ctr" || true); do \
-        echo "Processing: $lib"; \
-        patchelf --set-execstack false "$lib" 2>/dev/null || true; \
-    done
+# ---- Install CUDA 11 compatible ctranslate2 and faster-whisper ----
+RUN pip install --no-cache-dir --force-reinstall \
+        ctranslate2==3.24.0 \
+        faster-whisper==1.0.3
+
+# ---- Test ctranslate2 import ----
+RUN python -c "import ctranslate2; print(f'✓ ctranslate2 {ctranslate2.__version__} installed')" && \
+    python -c "import faster_whisper; print('✓ faster_whisper installed')"
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
@@ -88,7 +94,6 @@ FROM python:3.10-slim AS final
 
 ARG BUILD_VARIANT=gpu
 
-# Fix the LD_LIBRARY_PATH to include ctranslate2.libs directory
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
@@ -104,8 +109,7 @@ ENV LANG=C.UTF-8 \
     GLOG_minloglevel=2 \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
-    LD_LIBRARY_PATH=/usr/local/lib/python3.10/site-packages/ctranslate2.libs:/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH \
-    PYTHONPATH=/usr/local/lib/python3.10/site-packages:$PYTHONPATH
+    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 WORKDIR /app
 
@@ -128,33 +132,14 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
-        curl aria2 netcat-openbsd procps net-tools lsof \
-        patchelf && \
+        curl aria2 netcat-openbsd procps net-tools lsof && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
 
-# ---- Setup ctranslate2 library paths properly --------------------------------
-RUN echo "Setting up ctranslate2 library paths..." && \
-    # Find ctranslate2.libs directory and create symlinks
-    if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then \
-        echo "Found ctranslate2.libs directory, creating symlinks..."; \
-        cd /usr/local/lib/python3.10/site-packages/ctranslate2.libs && \
-        for lib in *.so*; do \
-            if [ -f "$lib" ]; then \
-                echo "Linking $lib to /usr/local/lib/"; \
-                ln -sf "$(pwd)/$lib" "/usr/local/lib/$lib"; \
-            fi; \
-        done; \
-    fi && \
-    # Add the ctranslate2.libs directory to ld.so.conf
-    echo "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" > /etc/ld.so.conf.d/ctranslate2.conf && \
-    echo "/usr/local/lib" >> /etc/ld.so.conf.d/ctranslate2.conf && \
-    # Update library cache
-    ldconfig && \
-    # Verify the libraries are accessible
-    ls -la /usr/local/lib/python3.10/site-packages/ctranslate2.libs/ 2>/dev/null || echo "ctranslate2.libs not found yet"
+# ---- Update library cache ---------------------------------------------------
+RUN ldconfig
 
 # ---- Clean Python cache in final image --------------------------------------
 RUN find /usr/local -type f -name "*.pyc" -delete && \
@@ -164,62 +149,9 @@ RUN find /usr/local -type f -name "*.pyc" -delete && \
 COPY . .
 RUN chmod +x /app/start.sh
 
-# ---- Create a robust startup script for library fixing ----------------------
-RUN cat > /app/fix_libraries.sh << 'EOF'
-#!/bin/bash
-echo "=== Library Fix Script Starting ==="
-
-# Set the library path
-export LD_LIBRARY_PATH="/usr/local/lib/python3.10/site-packages/ctranslate2.libs:${LD_LIBRARY_PATH}"
-
-# Ensure ctranslate2 libraries are linked
-if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then
-    echo "ctranslate2.libs directory found, ensuring links..."
-    cd /usr/local/lib/python3.10/site-packages/ctranslate2.libs
-    for lib in *.so*; do
-        if [ -f "$lib" ] && [ ! -f "/usr/local/lib/$lib" ]; then
-            ln -sf "$(pwd)/$lib" "/usr/local/lib/$lib" 2>/dev/null || true
-        fi
-    done
-    ldconfig 2>/dev/null || true
-    echo "Libraries in ctranslate2.libs:"
-    ls -la /usr/local/lib/python3.10/site-packages/ctranslate2.libs/
-fi
-
-# Test import with proper error handling
-echo "Testing ctranslate2 import..."
-python -c "
-import sys
-import os
-
-# Ensure library path is set
-os.environ['LD_LIBRARY_PATH'] = '/usr/local/lib/python3.10/site-packages/ctranslate2.libs:' + os.environ.get('LD_LIBRARY_PATH', '')
-
-try:
-    import ctranslate2
-    print('✓ ctranslate2 import successful')
-    print(f'  Version: {ctranslate2.__version__}')
-except ImportError as e:
-    print(f'✗ ctranslate2 import failed: {e}')
-    print('  Library search paths:')
-    print(f'    LD_LIBRARY_PATH: {os.environ.get(\"LD_LIBRARY_PATH\")}')
-    print('  Attempting to diagnose...')
-    import subprocess
-    result = subprocess.run(['ldd', '/usr/local/lib/python3.10/site-packages/ctranslate2/_ext.cpython-310-x86_64-linux-gnu.so'], 
-                          capture_output=True, text=True)
-    print('  Missing libraries:')
-    for line in result.stdout.split('\\n'):
-        if 'not found' in line:
-            print(f'    {line}')
-"
-
-echo "=== Library Fix Script Complete ==="
-EOF
-RUN chmod +x /app/fix_libraries.sh
-
 # ---- Non-root user & directories ---------------------------------------------
 RUN useradd -ms /bin/bash appuser && \
-    mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
+    mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models /workspace/uploads && \
     chown -R appuser:appuser /app /workspace
 
 # ---- Switch to non-root user ------------------------------------------------
@@ -231,5 +163,4 @@ EXPOSE 5000 8888
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
 
-# ---- Modified entrypoint to run fix script first ----------------------------
-ENTRYPOINT ["/bin/bash", "-c", "source /app/fix_libraries.sh && exec /app/start.sh"]
+CMD ["./start.sh"]
