@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Fix library paths for ctranslate2 (ADD THIS SECTION)
+# Fix library paths for ctranslate2
 export LD_LIBRARY_PATH="/usr/local/lib/python3.10/site-packages/ctranslate2.libs:${LD_LIBRARY_PATH:-}"
 
-# Ensure libraries are accessible (ADD THIS SECTION)
+# Ensure libraries are accessible
 if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then
     echo "Setting up ctranslate2 library links..."
     for lib in /usr/local/lib/python3.10/site-packages/ctranslate2.libs/*.so*; do
@@ -18,14 +18,50 @@ if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then
     ldconfig 2>/dev/null || true
 fi
 
-# Test ctranslate2 import (ADD THIS SECTION)
+# Test critical imports at runtime
+echo "Testing critical Python imports..."
 python -c "
+import sys
+
+# Test ctranslate2
 try:
     import ctranslate2
     print('✓ ctranslate2 import successful')
 except ImportError as e:
     print(f'✗ ctranslate2 import failed: {e}')
-" || true
+    sys.exit(1)
+
+# Test faster_whisper
+try:
+    import faster_whisper
+    print('✓ faster_whisper import successful')
+except ImportError as e:
+    print(f'✗ faster_whisper import failed: {e}')
+    sys.exit(1)
+
+# Test other critical imports
+try:
+    import torch
+    print(f'✓ torch {torch.__version__} import successful')
+    if torch.cuda.is_available():
+        print(f'✓ CUDA is available')
+    else:
+        print('⚠ CUDA not available - will use CPU')
+except ImportError as e:
+    print(f'✗ torch import failed: {e}')
+"
+
+# Check if the imports succeeded
+if [ $? -ne 0 ]; then
+    echo "❌ Critical imports failed. Container cannot start properly."
+    echo "This is likely due to missing privileges. Ensure docker-compose.yml has:"
+    echo "  privileged: true"
+    echo "  security_opt:"
+    echo "    - seccomp:unconfined"
+    exit 1
+fi
+
+echo "✅ All critical imports successful"
 
 # Clean up stale PID files from previous runs
 echo "Cleaning up stale PID files..."
@@ -42,7 +78,6 @@ export WHISPER_IMPL=${WHISPER_IMPL:-fast}
 export WHISPER_MODEL=${WHISPER_MODEL:-large-v2}
 export PYTHONPATH="/app:${PYTHONPATH:-}"
 
-# [REST OF YOUR EXISTING start.sh CONTINUES AS IS...]
 # Detect RunPod → prefer local Redis inside container
 if [ "${RUNPOD_POD_ID:-}" != "" ]; then
   echo "Detected RunPod environment - using local Redis"
