@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# FIX: Clean up stale PID files from previous runs to prevent startup failures.
+echo "Cleaning up stale PID files..."
+rm -f /tmp/gunicorn.pid
+rm -f /tmp/celery.pid
+
 ### ---------- Env ----------
 export PYTHONUNBUFFERED=1
 export CUDA_MODULE_LOADING=${CUDA_MODULE_LOADING:-LAZY}
@@ -188,13 +193,13 @@ echo "============================================"
 echo "✅ All services started successfully"
 echo "📍 Application: http://0.0.0.0:5000"
 echo "📋 Logs saved to:"
-echo "   - Celery  : ${CELERY_LOG}"
-echo "   - Gunicorn: ${GUNICORN_LOG}"
+echo "    - Celery   : ${CELERY_LOG}"
+echo "    - Gunicorn: ${GUNICORN_LOG}"
 echo "============================================"
 echo
 echo "📊 Streaming Celery logs (filtered)..."
-echo "   Hiding: PaddlePaddle warnings"
-echo "   Showing: Downloads, ASR, Processing, Errors"
+echo "    Hiding: PaddlePaddle warnings"
+echo "    Showing: Downloads, ASR, Processing, Errors"
 echo "============================================"
 echo
 
