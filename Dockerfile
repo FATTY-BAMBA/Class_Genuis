@@ -61,7 +61,7 @@ RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 # ---- Install CUDA 11 compatible ctranslate2 and faster-whisper ----
 RUN pip install --no-cache-dir --force-reinstall \
         ctranslate2==3.24.0 \
-        faster-whisper==1.0.3
+        faster-whisper==0.10.1
 
 # ---- Test ctranslate2 import ----
 RUN python -c "import ctranslate2; print(f'✓ ctranslate2 {ctranslate2.__version__} installed')" && \
