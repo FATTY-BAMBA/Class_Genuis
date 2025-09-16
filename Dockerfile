@@ -18,8 +18,7 @@ ENV LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DEFAULT_TIMEOUT=1200 \
-    PIP_CONSTRAINT=/tmp/constraints.txt
+    PIP_DEFAULT_TIMEOUT=1200
 
 # ---- System dependencies (Node needed by VisualDL) ---------------------------
 RUN apt-get update && \
@@ -33,8 +32,12 @@ RUN apt-get update && \
 # ---- Copy dependency lists early for maximum cache hit -----------------------
 COPY requirements.txt constraints.txt /tmp/
 
-# Remove version constraints for ctranslate2 and faster-whisper from requirements
-RUN grep -v "ctranslate2\|faster-whisper" /tmp/requirements.txt > /tmp/requirements_filtered.txt || cp /tmp/requirements.txt /tmp/requirements_filtered.txt
+# Remove conflicting packages from requirements and constraints
+RUN grep -v "ctranslate2\|faster-whisper\|tokenizers\|transformers" /tmp/requirements.txt > /tmp/requirements_filtered.txt || cp /tmp/requirements.txt /tmp/requirements_filtered.txt
+
+# Remove conflicting constraints to allow pip to resolve dependencies
+RUN cp /tmp/constraints.txt /tmp/constraints_orig.txt && \
+    sed -i '/tokenizers/d; /transformers/d; /ctranslate2/d; /faster-whisper/d' /tmp/constraints.txt
 
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
 
@@ -58,14 +61,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- Install CUDA 11 compatible ctranslate2 and faster-whisper ----
-RUN pip install --no-cache-dir --force-reinstall \
-        ctranslate2==3.24.0 \
-        faster-whisper==0.10.1
+# ---- Install CUDA 11 compatible versions with auto-resolved dependencies ----
+RUN pip install --no-cache-dir faster-whisper==0.10.1 && \
+    pip install --no-cache-dir --force-reinstall ctranslate2==3.24.0 && \
+    echo "Installed versions:" && \
+    pip list | grep -E "tokenizers|transformers|ctranslate2|faster-whisper" || true
 
 # ---- Test ctranslate2 import ----
 RUN python -c "import ctranslate2; print(f'✓ ctranslate2 {ctranslate2.__version__} installed')" && \
-    python -c "import faster_whisper; print('✓ faster_whisper installed')"
+    python -c "import faster_whisper; print('✓ faster_whisper installed')" && \
+    python -c "import tokenizers; print(f'✓ tokenizers {tokenizers.__version__} installed')" && \
+    python -c "import transformers; print(f'✓ transformers {transformers.__version__} installed')"
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
@@ -109,7 +115,7 @@ ENV LANG=C.UTF-8 \
     GLOG_minloglevel=2 \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
-    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
 
 WORKDIR /app
 
