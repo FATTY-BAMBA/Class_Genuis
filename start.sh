@@ -1,6 +1,32 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Fix library paths for ctranslate2 (ADD THIS SECTION)
+export LD_LIBRARY_PATH="/usr/local/lib/python3.10/site-packages/ctranslate2.libs:${LD_LIBRARY_PATH:-}"
+
+# Ensure libraries are accessible (ADD THIS SECTION)
+if [ -d "/usr/local/lib/python3.10/site-packages/ctranslate2.libs" ]; then
+    echo "Setting up ctranslate2 library links..."
+    for lib in /usr/local/lib/python3.10/site-packages/ctranslate2.libs/*.so*; do
+        if [ -f "$lib" ]; then
+            libname=$(basename "$lib")
+            if [ ! -f "/usr/local/lib/$libname" ]; then
+                ln -sf "$lib" "/usr/local/lib/$libname" 2>/dev/null || true
+            fi
+        fi
+    done
+    ldconfig 2>/dev/null || true
+fi
+
+# Test ctranslate2 import (ADD THIS SECTION)
+python -c "
+try:
+    import ctranslate2
+    print('✓ ctranslate2 import successful')
+except ImportError as e:
+    print(f'✗ ctranslate2 import failed: {e}')
+" || true
+
 # Clean up stale PID files from previous runs
 echo "Cleaning up stale PID files..."
 rm -f /tmp/gunicorn.pid
@@ -16,6 +42,7 @@ export WHISPER_IMPL=${WHISPER_IMPL:-fast}
 export WHISPER_MODEL=${WHISPER_MODEL:-large-v2}
 export PYTHONPATH="/app:${PYTHONPATH:-}"
 
+# [REST OF YOUR EXISTING start.sh CONTINUES AS IS...]
 # Detect RunPod → prefer local Redis inside container
 if [ "${RUNPOD_POD_ID:-}" != "" ]; then
   echo "Detected RunPod environment - using local Redis"
