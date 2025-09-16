@@ -61,9 +61,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- Install CUDA 11 compatible versions with auto-resolved dependencies ----
+# ---- Install CUDA 11 compatible versions with correct dependencies ----
 RUN pip install --no-cache-dir faster-whisper==0.10.1 && \
     pip install --no-cache-dir --force-reinstall ctranslate2==3.24.0 && \
+    pip install --no-cache-dir --force-reinstall transformers==4.36.2 && \
     echo "Installed versions:" && \
     pip list | grep -E "tokenizers|transformers|ctranslate2|faster-whisper" || true
 
