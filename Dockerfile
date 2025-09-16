@@ -56,11 +56,12 @@ RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
 # ---- rebuild ctranslate2 and fix executable stack issue --------------
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ prelink && \
+    # FIX: Changed 'prelink' to 'execstack', which is the correct package name
+    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ execstack && \
     pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
-    # FIX: Find the compiled library and remove the executable stack requirement
     find /usr/local/lib -name "libctranslate2*.so*" -exec echo "Disabling exec-stack on {}" \; -exec execstack -c {} \; && \
-    apt-get purge -y build-essential cmake git gcc g++ prelink && \
+    # FIX: Also changed 'prelink' to 'execstack' here for cleanup
+    apt-get purge -y build-essential cmake git gcc g++ execstack && \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
