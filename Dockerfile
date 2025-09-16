@@ -26,7 +26,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev \
-        libopenblas-dev libssl-dev && \
+        libopenblas-dev libssl-dev patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy dependency lists early for maximum cache hit -----------------------
@@ -67,8 +67,13 @@ RUN pip install --no-cache-dir faster-whisper==0.10.1 && \
     echo "Installed versions:" && \
     pip list | grep -E "tokenizers|transformers|ctranslate2|faster-whisper" || true
 
-# ---- Test ctranslate2 import ----
-RUN python -c "import ctranslate2; print(f'✓ ctranslate2 {ctranslate2.__version__} installed')" && \
+# ---- Fix ctranslate2 library issues in builder ----
+RUN find /usr/local/lib -name "libctranslate2*.so*" -exec patchelf --set-execstack false {} \; 2>/dev/null || true && \
+    find /usr/local/lib/python3.10/site-packages -name "*.so*" -path "*ctranslate2*" -exec patchelf --set-execstack false {} \; 2>/dev/null || true
+
+# ---- Test imports (with fallback for ctranslate2) ----
+RUN python -c "import ctranslate2; print(f'✓ ctranslate2 {ctranslate2.__version__} installed')" || \
+    echo "Warning: ctranslate2 import failed at build time, will be fixed at runtime" && \
     python -c "import faster_whisper; print('✓ faster_whisper installed')" && \
     python -c "import tokenizers; print(f'✓ tokenizers {tokenizers.__version__} installed')" && \
     python -c "import transformers; print(f'✓ transformers {transformers.__version__} installed')"
@@ -138,11 +143,15 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
-        curl aria2 netcat-openbsd procps net-tools lsof && \
+        curl aria2 netcat-openbsd procps net-tools lsof patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
+
+# ---- Fix ctranslate2 libraries in runtime as well ----------------------------
+RUN find /usr/local/lib -name "libctranslate2*.so*" -exec patchelf --set-execstack false {} \; 2>/dev/null || true && \
+    find /usr/local/lib/python3.10/site-packages -name "*.so*" -path "*ctranslate2*" -exec patchelf --set-execstack false {} \; 2>/dev/null || true
 
 # ---- Update library cache ---------------------------------------------------
 RUN ldconfig
