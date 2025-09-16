@@ -7,7 +7,7 @@ services:
       args:
         BUILD_VARIANT: ${BUILD_VARIANT:-gpu}
     container_name: class_genius_web
-    restart: always
+    restart: unless-stopped  # Better than 'always' for maintenance
     ports:
       - "5000:5000"
     volumes:
@@ -18,11 +18,18 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0  # Changed from 'all' to '0' for single GPU
+      - WHISPER_DEVICE=cuda
+      - WHISPER_MODEL=large-v2
+      - CELERY_LOGLEVEL=INFO
+      - LOG_LEVEL=INFO
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy  # Better dependency management
     networks:
       - app-net
+    security_opt:
+      - seccomp:unconfined  # Helps with the ctranslate2 issue
     deploy:
       resources:
         reservations:
@@ -30,14 +37,33 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+        limits:
+          memory: 32G  # Set appropriate memory limit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
   redis:
-    image: "redis:alpine"
+    image: "redis:7-alpine"  # More specific version
     container_name: class_genius_redis
-    restart: always
+    restart: unless-stopped
+    command: redis-server --appendonly yes --save 60 1  # Enable persistence
+    volumes:
+      - redis_data:/data  # Persist Redis data
     networks:
       - app-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   app-net:
     driver: bridge
+
+volumes:
+  redis_data:  # Named volume for Redis persistence
