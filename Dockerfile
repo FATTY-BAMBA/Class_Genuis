@@ -54,11 +54,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- rebuild ctranslate2 without exec-stack (production-safe) --------------
+# ---- rebuild ctranslate2 and fix executable stack issue --------------
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ && \
+    apt-get install -y --no-install-recommends build-essential cmake git gcc g++ prelink && \
     pip install --no-cache-dir --no-binary ctranslate2 ctranslate2==4.4.0 && \
-    apt-get purge -y build-essential cmake git gcc g++ && \
+    # FIX: Find the compiled library and remove the executable stack requirement
+    find /usr/local/lib -name "libctranslate2*.so*" -exec echo "Disabling exec-stack on {}" \; -exec execstack -c {} \; && \
+    apt-get purge -y build-essential cmake git gcc g++ prelink && \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
@@ -110,7 +112,6 @@ WORKDIR /app
 RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
         apt-get update && \
         apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-        # ---- FIX: Corrected typo in URL (x88_64 -> x86_64) ----
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub \
             | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
