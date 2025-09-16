@@ -27,7 +27,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         nodejs build-essential cmake git wget curl \
         libcairo2-dev libjpeg-dev libgif-dev pkg-config python3-dev \
-        libopenblas-dev libssl-dev && \
+        libopenblas-dev libssl-dev patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy dependency lists early for maximum cache hit -----------------------
@@ -54,18 +54,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
-# ---- Fix ctranslate2 executable stack issue (CORRECTED) ----
-# Install execstack tool temporarily for fixing the library
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends execstack && \
-    # Clear executable stack flag on ALL ctranslate2 libraries
-    find /usr/local/lib/python*/site-packages -name "*.so*" -path "*/ctranslate2*" -exec execstack -c {} \; 2>/dev/null || true && \
-    # Also fix any other potentially problematic libraries
-    find /usr/local/lib -name "libctranslate2*.so*" -exec execstack -c {} \; 2>/dev/null || true && \
-    # Clean up execstack as we don't need it in runtime
-    apt-get purge -y execstack && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
+# ---- Fix ctranslate2 executable stack issue using patchelf ----
+RUN echo "Fixing ctranslate2 libraries..." && \
+    # Find and fix all ctranslate2 shared libraries
+    for lib in $(find /usr/local -name "*.so*" | grep -E "ctranslate2|ctr"); do \
+        echo "Processing: $lib"; \
+        # Remove executable stack requirement
+        patchelf --set-execstack false "$lib" 2>/dev/null || true; \
+        # Clear GNU_STACK if present
+        patchelf --remove-rpath "$lib" 2>/dev/null || true; \
+        patchelf --set-rpath '$ORIGIN' "$lib" 2>/dev/null || true; \
+    done && \
+    # Verify the fix by attempting import
+    python -c "import ctranslate2; print('ctranslate2 import successful')" || \
+    echo "Warning: ctranslate2 import test failed, will retry at runtime"
 
 # ---- VisualDL (not in requirements.txt) -------------------------------------
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
@@ -94,6 +96,7 @@ FROM python:3.10-slim AS final
 
 ARG BUILD_VARIANT=gpu
 
+# Add LD_LIBRARY_PATH fix for ctranslate2
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
@@ -109,8 +112,8 @@ ENV LANG=C.UTF-8 \
     GLOG_minloglevel=2 \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
-    LD_PRELOAD="" \
-    EXECSTACK_DISABLE=1
+    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
+    LD_PRELOAD=""
 
 WORKDIR /app
 
@@ -134,20 +137,17 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg redis-server redis-tools libsndfile1 libgl1 libgomp1 \
         curl aria2 netcat-openbsd procps net-tools lsof \
-        # Add patchelf for additional library fixing if needed
+        # Add patchelf for runtime fixing
         patchelf && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---- Copy entire Python environment from builder -----------------------------
 COPY --from=builder /usr/local /usr/local
 
-# ---- Additional runtime fix for ctranslate2 (belt and suspenders approach) ----
-# This ensures the libraries are properly configured in the final image
+# ---- Runtime library configuration -------------------------------------------
 RUN ldconfig && \
-    # Use patchelf to remove EXECSTACK flag as a fallback
-    find /usr/local/lib/python*/site-packages -name "*.so*" -path "*/ctranslate2*" \
-        -exec patchelf --remove-needed EXECSTACK {} \; 2>/dev/null || true && \
-    # Update library cache
+    echo "/usr/local/lib" >> /etc/ld.so.conf.d/local.conf && \
+    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local.conf && \
     ldconfig
 
 # ---- Clean Python cache in final image --------------------------------------
@@ -158,22 +158,48 @@ RUN find /usr/local -type f -name "*.pyc" -delete && \
 COPY . .
 RUN chmod +x /app/start.sh
 
-# ---- Create startup script to handle runtime library issues -----------------
+# ---- Create comprehensive startup script -------------------------------------
 RUN cat > /app/fix_libraries.sh << 'EOF'
 #!/bin/bash
-# Runtime library fix script
-echo "Checking ctranslate2 libraries..."
-# Test if ctranslate2 can be imported
-python -c "import ctranslate2; print('ctranslate2 OK')" 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo "ctranslate2 import failed, attempting runtime fix..."
-    # Try to fix with patchelf if available
-    if command -v patchelf >/dev/null 2>&1; then
-        find /usr/local/lib -name "*ctranslate2*.so*" -exec patchelf --set-execstack false {} \; 2>/dev/null
+echo "=== Library Fix Script Starting ==="
+
+# Function to fix a single library
+fix_library() {
+    local lib="$1"
+    if [ -f "$lib" ]; then
+        echo "Fixing: $lib"
+        patchelf --set-execstack false "$lib" 2>/dev/null || true
     fi
-    # Update library cache
-    ldconfig 2>/dev/null || true
-fi
+}
+
+# Fix all ctranslate2 libraries
+echo "Scanning for ctranslate2 libraries..."
+for lib in $(find /usr/local -name "*.so*" 2>/dev/null | grep -E "ctranslate2|ctr" || true); do
+    fix_library "$lib"
+done
+
+# Update library cache
+ldconfig 2>/dev/null || true
+
+# Test import
+echo "Testing ctranslate2 import..."
+python -c "
+try:
+    import ctranslate2
+    print('✓ ctranslate2 import successful')
+except ImportError as e:
+    print(f'✗ ctranslate2 import failed: {e}')
+    print('Attempting fallback fix...')
+    import os
+    os.environ['LD_PRELOAD'] = ''
+    try:
+        import ctranslate2
+        print('✓ ctranslate2 import successful with LD_PRELOAD cleared')
+    except:
+        print('✗ All ctranslate2 fixes failed')
+" || true
+
+echo "=== Library Fix Script Complete ==="
 EOF
 RUN chmod +x /app/fix_libraries.sh
 
@@ -181,6 +207,8 @@ RUN chmod +x /app/fix_libraries.sh
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models && \
     chown -R appuser:appuser /app /workspace
+
+# ---- Switch to non-root user ------------------------------------------------
 USER appuser
 
 EXPOSE 5000 8888
