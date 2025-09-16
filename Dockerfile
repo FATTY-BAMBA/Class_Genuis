@@ -51,7 +51,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --no-deps --no-cache-dir -r /tmp/requirements.txt && \
     python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
-# ---- FIX: Install Polygon3 here, after build-essential is available ----
+# ---- Install Polygon3, after build-essential is available ----
 RUN pip install --no-cache-dir "Polygon3==3.0.9.1"
 
 # ---- rebuild ctranslate2 without exec-stack (production-safe) --------------
@@ -76,7 +76,7 @@ RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
 # ---- PaddleOCR --------------------------------------------------------------
 RUN python -m pip install --no-cache-dir paddleocr==2.6.1
 
-# ---- FIX: Corrected the final clean-up command syntax -----------------------
+# ---- Final clean-up in builder ----------------------------------------------
 RUN find /usr/local -type f -name "*.pyc" -delete && \
     find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     rm -rf /tmp/* /root/.cache /var/cache/apt/*
@@ -110,7 +110,8 @@ WORKDIR /app
 RUN if [ "$BUILD_VARIANT" = "gpu" ]; then \
         apt-get update && \
         apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x88_64/3bf863cc.pub \
+        # ---- FIX: Corrected typo in URL (x88_64 -> x86_64) ----
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub \
             | gpg --dearmor -o /usr/share/keyrings/nvidia-archive-keyring.gpg && \
         echo "deb [signed-by=/usr/share/keyrings/nvidia-archive-keyring.gpg] \
             https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
@@ -150,3 +151,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:5000/healthz || exit 1
 
 CMD ["./start.sh"]
+
