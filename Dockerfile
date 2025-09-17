@@ -40,7 +40,7 @@ WORKDIR /build
 COPY requirements.txt constraints.txt /build/
 
 # Remove conflicting packages from requirements
-RUN grep -v "ctranslate2\|faster-whisper\|tokenizers\|transformers" requirements.txt > requirements_filtered.txt || cp requirements.txt requirements_filtered.txt
+RUN grep -v "ctranslate2\|faster-whisper\|tokenizers\|transformers\|numpy" requirements.txt > requirements_filtered.txt || cp requirements.txt requirements_filtered.txt
 
 # Install core dependencies
 RUN python -m pip install --no-cache-dir \
@@ -51,14 +51,17 @@ RUN python -m pip install --no-cache-dir \
     meson-python==0.15.0 \
     ninja==1.11.1
 
-# Install PyTorch with CUDA 11.8 support
+# Install NumPy 1.x FIRST (before PyTorch and other packages)
+RUN python -m pip install --no-cache-dir numpy==1.26.4
+
+# Install PyTorch with CUDA 11.8 support (will use existing NumPy)
 RUN python -m pip install \
     torch==2.2.2+cu118 \
     torchvision==0.17.2+cu118 \
     torchaudio==2.2.2+cu118 \
     --extra-index-url https://download.pytorch.org/whl/cu118
 
-# Install other requirements
+# Install other requirements (without numpy since we already have it)
 RUN python -m pip install --no-cache-dir -r requirements_filtered.txt
 
 # Install Polygon3
@@ -78,6 +81,10 @@ RUN python -m pip install --no-cache-dir \
 
 # Install VisualDL
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
+
+# CRITICAL: Force NumPy 1.x as the final step to override any package that installed 2.x
+RUN python -m pip install --no-cache-dir --force-reinstall numpy==1.26.4 && \
+    python -c "import numpy; print(f'NumPy version locked at: {numpy.__version__}')"
 
 # ==================== RUNTIME STAGE ====================
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04 AS final
@@ -124,7 +131,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 WORKDIR /app
 COPY . .
 
-# Fix numpy.int deprecation
+# Fix numpy.int deprecation (keep for compatibility with old code)
 RUN echo "import numpy as np; np.int = int if not hasattr(np, 'int') else np.int" > /usr/local/lib/python3.10/dist-packages/numpy_patch.py || true && \
     echo "try: import numpy_patch\nexcept: pass" >> /usr/local/lib/python3.10/dist-packages/sitecustomize.py || true
 
