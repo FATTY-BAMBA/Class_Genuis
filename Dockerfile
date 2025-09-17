@@ -103,12 +103,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
     CUDA_VISIBLE_DEVICES=0 \
-    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH} \
+    CUDNN_ROOT=/usr/lib/x86_64-linux-gnu
 
 # ==================== RUNTIME DEPENDENCIES ====================
+# Install cuDNN runtime libraries properly
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        software-properties-common && \
+        software-properties-common wget && \
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb && \
+    dpkg -i cuda-keyring_1.0-1_all.deb && \
+    rm cuda-keyring_1.0-1_all.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libcudnn8=8.6.0.163-1+cuda11.8 \
+        libnccl2=2.15.5-1+cuda11.8 \
+        libnccl-dev=2.15.5-1+cuda11.8 && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -121,12 +131,15 @@ RUN apt-get update && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
-    ldconfig && \
+    ldconfig /usr/local/cuda/lib64 && \
     rm -rf /var/lib/apt/lists/*
 
 # ==================== COPY PYTHON ENVIRONMENT ====================
 COPY --from=builder /usr/local/lib/python3.10 /usr/local/lib/python3.10
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Ensure CUDA libraries are accessible
+RUN ldconfig /usr/local/cuda/lib64
 
 # ==================== APPLICATION ====================
 WORKDIR /app
