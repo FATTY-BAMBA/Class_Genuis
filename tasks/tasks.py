@@ -1105,9 +1105,10 @@ def process_video_task(self, play_url_or_path, video_info, num_questions=10, num
                 logger.warning("⚠️ Failed writing combined_text_for_gpt.txt: %s", _e)
 
             # Get chapters from the chaptering result and merge into final payload
-            chapters = chaptering_result.get("chapters", [])  # Get actual chapters from chaptering
+            chapters = chaptering_result  # Get actual chapters from chaptering
             if not chapters:
                 logger.warning("⚠️ No chapters returned by chapter generation; using empty list")
+                chapters = {}
             # Merge chapters into the final payload
             qa_result["chapters"] = chapters
 
