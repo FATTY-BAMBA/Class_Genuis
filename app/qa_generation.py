@@ -102,11 +102,14 @@ class LectureNoteSection:
     key_points: List[str]
     examples: List[str]
 
+from dataclasses import field  # ← Add this import if not already there
 @dataclass
 class EducationalContentResult:
     mcqs: List[MCQ]
     lecture_notes: List[LectureNoteSection]
     summary: str
+    topics: List[Dict] = field(default_factory=list)          # ← NEW
+    key_takeaways: List[str] = field(default_factory=list)    # ← NEW
 
 # ==================== UTILITIES ====================
 def sec_to_hms(sec: int) -> str:
@@ -169,41 +172,363 @@ def ocr_segments_to_raw_text(ocr_segments: List[Dict]) -> str:
     return "\n".join(lines)
 
 # ---------- Simplified -> Traditional conversion ----------
+# ==================== Initialize OpenCC (REQUIRED) ====================
 def _init_opencc():
+    """
+    Initialize OpenCC converter. This is REQUIRED for proper Traditional Chinese output.
+    Falls back to limited character mapping with warning if OpenCC not installed.
+    """
     try:
-        from opencc import OpenCC  # type: ignore
-        return OpenCC('s2t')  # Simplified to Traditional
-    except Exception:
+        from opencc import OpenCC
+        converter = OpenCC('s2t')
+        logger.info("OpenCC initialized successfully for S->T conversion")
+        return converter
+    except ImportError:
+        logger.error(
+            "OpenCC is not installed but is required for proper Traditional Chinese conversion. "
+            "Please install it with: pip install opencc-python-reimplemented"
+        )
+        # Return None to use fallback, but log warning on every conversion
+        return None
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenCC: {e}")
         return None
 
+# Initialize on module load
 _OPENCC = _init_opencc()
 
-# Minimal fallback mapping for common characters if OpenCC is unavailable.
+# ==================== Comprehensive Fallback Mapping ====================
+# Extended character mapping for when OpenCC is unavailable
+# This covers common educational and technical terms
 _S2T_FALLBACK = str.maketrans({
-    "后": "後", "里": "裡", "台": "臺", "万": "萬", "与": "與", "书": "書", "体": "體",
-    "价": "價", "优": "優", "儿": "兒", "动": "動", "华": "華", "发": "發",
-    "复": "復", "国": "國", "广": "廣", "汉": "漢", "会": "會", "纪": "紀", "简": "簡",
-    "经": "經", "历": "歷", "马": "馬", "门": "門", "面": "麵", "内": "內", "气": "氣",
-    "权": "權", "确": "確", "实": "實", "术": "術", "云": "雲",
-    "众": "眾", "为": "為", "从": "從", "冲": "衝", "读": "讀", "爱": "愛",
-    "战": "戰", "钟": "鐘", "级": "級", "师": "師", "学": "學", "习": "習",
-    "声": "聲", "观": "觀", "这": "這"
+    # Basic common characters
+    "后": "後", "里": "裡", "台": "臺", "万": "萬", "与": "與", "书": "書", 
+    "体": "體", "价": "價", "优": "優", "儿": "兒", "动": "動", "华": "華", 
+    "发": "發", "复": "復", "国": "國", "广": "廣", "汉": "漢", "会": "會", 
+    "纪": "紀", "简": "簡", "经": "經", "历": "歷", "马": "馬", "门": "門", 
+    "面": "麵", "内": "內", "气": "氣", "权": "權", "确": "確", "实": "實", 
+    "术": "術", "云": "雲", "众": "眾", "为": "為", "从": "從", "冲": "衝",
+    
+    # Educational and learning terms
+    "练": "練", "习": "習", "题": "題", "设": "設", "识": "識", "导": "導",
+    "统": "統", "议": "議", "论": "論", "验": "驗", "类": "類", "证": "證",
+    "释": "釋", "译": "譯", "编": "編", "课": "課", "讲": "講", "义": "義",
+    
+    # Technical and programming terms
+    "库": "庫", "码": "碼", "执": "執", "态": "態", "储": "儲", "载": "載",
+    "输": "輸", "进": "進", "选": "選", "错": "錯", "数": "數", "据": "據",
+    "构": "構", "节": "節", "块": "塊", "链": "鏈", "队": "隊", "栈": "棧",
+    
+    # Common verbs and actions
+    "说": "說", "读": "讀", "写": "寫", "问": "問", "应": "應", "见": "見",
+    "开": "開", "关": "關", "买": "買", "卖": "賣", "听": "聽", "观": "觀",
+    "记": "記", "认": "認", "让": "讓", "谈": "談", "请": "請", "转": "轉",
+    
+    # Analysis and evaluation terms
+    "评": "評", "测": "測", "试": "試", "检": "檢", "查": "查", "审": "審",
+    "对": "對", "错": "錯", "难": "難", "题": "題", "答": "答", "总": "總",
+    
+    # Additional common characters in educational content
+    "师": "師", "学": "學", "声": "聲", "战": "戰", "钟": "鐘", "级": "級",
+    "这": "這", "爱": "愛", "时": "時", "间": "間", "现": "現", "电": "電",
+    "视": "視", "频": "頻", "网": "網", "络": "絡", "线": "線", "连": "連",
+    "图": "圖", "画": "畫", "场": "場", "报": "報", "纸": "紙", "张": "張",
 })
 
+# ==================== Conversion Function ====================
 def to_traditional(text: str) -> str:
-    """Convert Simplified Chinese to Traditional Chinese.
-    Uses OpenCC if available; otherwise falls back to a small character map.
+    """
+    Convert Simplified Chinese to Traditional Chinese.
+    
+    Priority:
+    1. Use OpenCC if available (recommended)
+    2. Fall back to character mapping with warning
+    
+    Args:
+        text: Input text potentially containing Simplified Chinese
+    
+    Returns:
+        Text converted to Traditional Chinese
     """
     if not text:
         return text
+    
+    # Try OpenCC first (recommended path)
     if _OPENCC is not None:
         try:
             return _OPENCC.convert(text)
-        except Exception:
-            pass
-    # Fallback: basic character-level conversion
+        except Exception as e:
+            logger.warning(f"OpenCC conversion failed: {e}, using fallback")
+    
+    # Fallback path - warn on first use in session
+    if not hasattr(to_traditional, '_fallback_warned'):
+        logger.warning(
+            "Using limited character mapping for S->T conversion. "
+            "For best results, install OpenCC: pip install opencc-python-reimplemented"
+        )
+        to_traditional._fallback_warned = True
+    
+    # Apply fallback character mapping
     return text.translate(_S2T_FALLBACK)
 
+# ==================== Validation Function (Optional) ====================
+def validate_traditional_conversion() -> bool:
+    """
+    Validate that Traditional Chinese conversion is working properly.
+    Can be called during initialization to ensure system is ready.
+    
+    Returns:
+        True if OpenCC is available and working, False otherwise
+    """
+    test_pairs = [
+        ("学习", "學習"),
+        ("编程", "編程"),
+        ("问题", "問題"),
+        ("这个", "這個"),
+    ]
+    
+    if _OPENCC is None:
+        logger.warning("OpenCC not available - using fallback conversion")
+        return False
+    
+    try:
+        for simplified, expected in test_pairs:
+            result = to_traditional(simplified)
+            if result != expected:
+                logger.warning(f"Conversion test failed: {simplified} -> {result} (expected {expected})")
+                return False
+        logger.info("Traditional Chinese conversion validated successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Conversion validation failed: {e}")
+        return False
+
+# ==================== PROMPT BUILDERS (Topics and Summary, ASR-first) ====================
+def build_topics_summary_prompt(transcript: str, 
+                                context: Optional[Dict[str, str]] = None) -> str:
+    """
+    Build prompt for LLM to extract meaningful topics and global summary from ASR transcript.
+    
+    Args:
+        transcript: The lecture transcript text
+        context: Optional context about the lecture (course name, instructor, etc.)
+    
+    Returns:
+        Formatted prompt string for the LLM
+    """
+    
+    context_info = ""
+    if context:
+        context_items = [f"- {k}: {v}" for k, v in context.items()]
+        context_info = f"""
+# 課程背景資訊
+{chr(10).join(context_items)}
+"""
+    
+    prompt = f"""
+# 角色定位
+你是一位資深的課程分析專家，專精於教學設計和知識結構化。你的任務是分析講座逐字稿，
+提取核心主題並生成高質量的課程摘要。
+
+{context_info}
+
+# 分析指令
+
+## 1. 深度理解
+- 仔細閱讀逐字稿，理解講座的整體脈絡
+- 識別教學目標、核心概念和邏輯流程
+- 注意講者的重點和強調內容
+
+## 2. 主題提取
+識別 **5-8 個**最重要的教學主題，每個主題應該：
+- 代表一個完整、有意義的學習單元
+- 具有明確的教學價值
+- 有足夠的內容深度（約佔15-30分鐘的講座時間）
+
+## 3. 內容過濾
+- 排除：行政公告、個人閒聊、技術問題
+- 合併：重複或零散但相關的內容
+- 保留：所有具教學價值的核心內容
+
+## 4. 摘要撰寫
+- 簡潔但全面地總結課程
+- 使用清晰、專業的語言
+- 捕捉講座精髓和學習價值
+
+# 輸出格式（務必嚴格遵守）
+
+```json
+{{
+  "topics": [
+    {{
+      "id": "01",
+      "title": "主題名稱（具體且描述性）",
+      "summary": "該主題的說明，2-3句話，涵蓋核心概念、學習要點和應用場景",
+      "keywords": ["關鍵詞1", "關鍵詞2", "關鍵詞3"]
+    }}
+  ],
+  "global_summary": "整個講座的綜合摘要（3-5句話），說明：1) 課程目標 2) 主要內容 3) 學習成果",
+  "key_takeaways": [
+    "核心要點1",
+    "核心要點2",
+    "核心要點3"
+  ]
+}}
+```
+
+# 主題品質標準
+
+1. **教學相關性**: 每個主題必須具有教育價值
+2. **具體明確**: 使用精確的主題名稱
+   - ✅ 好："Python列表切片與索引操作"
+   - ❌ 差："Python基礎"
+3. **邏輯連貫**: 主題順序應反映知識遞進關係
+4. **適當粒度**: 不要過於細碎或寬泛
+5. **實用導向**: 強調可應用的知識和技能
+
+# 輸入資料
+
+## ASR 逐字稿內容：
+{transcript}
+
+# 重要提醒
+- 時間戳和章節標記僅供參考，不要完全依賴
+- 關注講者的教學意圖，而非表面內容
+- 保持客觀中立，避免主觀評價
+- 確保輸出為有效的JSON格式
+"""
+    
+    return prompt
+
+def parse_topics_summary_response(response_text: str) -> tuple[List[Dict], str, List[str]]:
+    """
+    Parse topics, summary, and key takeaways from LLM response.
+    
+    Args:
+        response_text: Raw LLM response containing JSON
+    
+    Returns:
+        Tuple of (topics_list, global_summary, key_takeaways)
+        Returns empty structures if parsing fails
+    """
+    # Use module-level logger instead of print
+    logger = logging.getLogger(__name__)
+    
+    # Parse JSON from response
+    data = _safe_load_json(response_text)  # Use your existing function
+    if not data:
+        logger.warning("Failed to parse topics/summary response JSON")
+        return [], "", []
+    
+    # Extract with defensive parsing
+    topics = []
+    for i, topic_data in enumerate(data.get('topics', [])):
+        if not isinstance(topic_data, dict):
+            continue
+            
+        # Ensure required fields with sensible defaults
+        topic_id = str(topic_data.get('id', f"{i+1:02d}")).strip()
+        title = str(topic_data.get('title', f"主題 {i+1}")).strip()
+        summary = str(topic_data.get('summary', '')).strip()
+        
+        # Handle keywords - ensure it's a list of strings
+        keywords = topic_data.get('keywords', [])
+        if isinstance(keywords, str):
+            # Split comma-separated keywords: "word1, word2" → ["word1", "word2"]
+            keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+        elif not isinstance(keywords, list):
+            keywords = []
+        else:
+            # Ensure all keywords are strings
+            keywords = [str(k).strip() for k in keywords if k]
+        
+        # Only add topics with meaningful content
+        if len(title) > 3 and len(summary) > 10:  # Basic validation
+            topics.append({
+                "id": topic_id,
+                "title": title,
+                "summary": summary,
+                "keywords": keywords
+            })
+        else:
+            logger.debug(f"Skipping topic {topic_id}: insufficient content")
+    
+    # Extract global summary
+    global_summary = str(data.get('global_summary', '')).strip()
+    if not global_summary:
+        # Create a fallback summary from the first few topics
+        if topics:
+            topic_titles = [t['title'] for t in topics[:3]]
+            global_summary = f"本講座涵蓋{len(topics)}個主要主題，包括{'、'.join(topic_titles)}{'等' if len(topics) > 3 else ''}重要內容。"
+        else:
+            global_summary = "無法從內容生成摘要。"
+    
+    # Extract key takeaways
+    key_takeaways = []
+    raw_takeaways = data.get('key_takeaways', [])
+    
+    if isinstance(raw_takeaways, str):
+        # Handle string input - split by newlines or bullets
+        lines = [line.strip() for line in raw_takeaways.split('\n') if line.strip()]
+        for line in lines:
+            # Remove common bullet markers: •, -, *, numbers, etc.
+            clean_line = re.sub(r'^[\s•\-*\d\.\)]+', '', line).strip()
+            if clean_line:
+                key_takeaways.append(clean_line)
+    elif isinstance(raw_takeaways, list):
+        for item in raw_takeaways:
+            if isinstance(item, str) and item.strip():
+                key_takeaways.append(item.strip())
+            elif isinstance(item, (int, float)):
+                key_takeaways.append(str(item))
+    
+    # Ensure we have at least some takeaways
+    if not key_takeaways and topics:
+        key_takeaways = [f"掌握{t['title']}的核心概念" for t in topics[:3]]
+    
+    logger.info(f"Parsed {len(topics)} topics, summary: {len(global_summary)} chars, {len(key_takeaways)} takeaways")
+    return topics, global_summary, key_takeaways
+
+def validate_topics_output(data: Dict) -> tuple[bool, List[str]]:
+    """
+    Validate the structure of parsed topics/summary data.
+    Returns (is_valid, list_of_errors)
+    """
+    errors = []
+    
+    if not isinstance(data, dict):
+        return False, ["Data is not a dictionary"]
+    
+    # Check required top-level fields
+    if 'topics' not in data:
+        errors.append("Missing 'topics' field")
+    elif not isinstance(data['topics'], list):
+        errors.append("'topics' should be a list")
+    
+    if 'global_summary' not in data:
+        errors.append("Missing 'global_summary' field")
+    elif not isinstance(data['global_summary'], str):
+        errors.append("'global_summary' should be a string")
+    
+    # Validate individual topics
+    if isinstance(data.get('topics'), list):
+        for i, topic in enumerate(data['topics']):
+            if not isinstance(topic, dict):
+                errors.append(f"Topic {i} is not a dictionary")
+                continue
+                
+            if 'title' not in topic:
+                errors.append(f"Topic {i} missing 'title'")
+            elif not isinstance(topic['title'], str):
+                errors.append(f"Topic {i} title is not a string")
+                
+            if 'summary' not in topic:
+                errors.append(f"Topic {i} missing 'summary'")
+            elif not isinstance(topic['summary'], str):
+                errors.append(f"Topic {i} summary is not a string")
+    
+    return len(errors) == 0, errors
+                                    
 # ==================== PROMPT BUILDERS (V2, ASR-first) ====================
 def build_mcq_prompt_v2(
     transcript: str,
@@ -240,27 +565,33 @@ def build_mcq_prompt_v2(
     if ocr_context.strip():
         ocr_block = f"## 螢幕文字（OCR，僅作輔助參考）\n{ocr_context}\n\n"
 
+    # --- KEY ENHANCEMENT: Revised Prompt --- 
     prompt = f"""
-你是一位資深的教育 AI，為學習者設計高品質的多選題（繁體中文）。請嚴格依照下列規則出題，並**僅**輸出 JSON。
+你是一位資深的教學設計專家，負責為「{global_summary.splitlines()[0] if global_summary else "各種科目"}」課程設計高品質的多選題（MCQ）。請嚴格依照下列規則出題，並**僅**輸出 JSON。
+
+### 核心原則
+- **問題必須基於對逐字稿的整體理解**，而非孤立的單句。首先分析整段文本的 5-8 個核心主題與教學目標，再據此設計題目。
+- **測試深度理解**：問題應促使學生應用、分析、評估所學，而不僅是回憶事實。
 
 ### 資料來源優先序
-1) **ASR 逐字稿（主要依據）**
-2) **OCR 螢幕文字（輔助參考）**
+1) **ASR 逐字稿（主要依據）**：所有題目必須基於此內容。
+2) **OCR 螢幕文字（輔助參考）**：可用於生成有關視覺內容（如軟體界面、圖表、代碼）的題目。若與 ASR 衝突，以 ASR 為準。
 
 ### 全域脈絡（Global Context）
 {global_ctx_block}
 
-### 出題結構（Bloom；合計 {num_questions} 題）
-- Recall：{recall_n} 題
-- Application：{application_n} 題
-- Analysis：{analysis_n} 題
+### 出題結構（Bloom's 分類法；合計 {num_questions} 題）
+- **Recall（記憶）{recall_n} 題**：測驗關鍵術語、概念、步驟的名稱。*Example: 「Adobe Premiere 中剪輯影片的快捷鍵是什麼？」*
+- **Application（應用）{application_n} 題**：測驗在特定情境下運用所學知識的能力。
+  - *編程課程：必須包含「預測代碼輸出」或「找出代碼錯誤」的題目。請提供完整代碼片段。*
+  - *設計/行銷課程：測驗工具操作（e.g., 「要達成XX效果，下一步該點選哪個工具？」）或策略應用（e.g., 「對於一款新產品，應優先採用哪種行銷策略？」）。*
+- **Analysis（分析）{analysis_n} 題**：測驗比較、對照、解釋概念和推理的能力。*Example: 「為什麼講師建議使用 A 方法而不是 B 方法？」、「這個設計原則背後的目的是什麼？」*
 
-### 指引
-- 忽略行政/平台雜訊（連線、點名、會議 ID 等）。
-- 平衡 What/How/Why，可加入角色情境。
-- 每題 4 選項（A–D），具迷惑性；避免答案集中。
-- 難度比例：30% easy / 40% medium / 30% hard。
-- 每題需附解釋（正確原因 + 常見誤解）。
+### 題目品質指引
+- **選項設計**：生成 4 個具備「迷惑性」的選項。錯誤選項必須基於**常見的學生錯誤、實務上的誤解或容易混淆的概念**。避免無關或明顯錯誤的玩笑式選項。
+- **難度比例**：30% easy / 40% medium / 30% hard。
+- **解釋說明**：每題的解釋必須包含「為何正確」以及「常見的錯誤選擇及其原因」。
+- **主題標籤**：`topic` 字段應標明該題測驗的具體知識點（e.g., `Python列表索引`, `色彩理論`, `Facebook廣告受眾設定`）。
 
 ### 輸出格式（僅 JSON）
 ```json
@@ -276,9 +607,9 @@ def build_mcq_prompt_v2(
     }}
   ]
 }}
-```
 
-### 資料
+
+### 輸入資料
 ## ASR 逐字稿（主要依據）
 {transcript}
 
@@ -295,8 +626,8 @@ def build_lecture_notes_prompt_v2(
     topics: Optional[List[Dict]] = None,
     global_summary: str = "",
 ) -> str:
-    """ASR-first lecture notes prompt with strong structure and past-tense voice.
-       Schema preserved: sections[{title, content, key_points[], examples[]}], summary
+    """ASR-first lecture notes prompt. Transforms transcripts into structured, hierarchical study guides.
+       Schema: sections[{title, content, key_points[]}], summary, key_terms[]
     """
     topics_snippet = ""
     if topics:
@@ -331,35 +662,54 @@ def build_lecture_notes_prompt_v2(
     min_words = num_pages * 400
     max_words = (num_pages + 1) * 350
 
+    # --- FINAL ENHANCED PROMPT ---
     prompt = f"""
-你是一位專業的教學設計助手。請以**ASR 逐字稿**為主要依據撰寫講義（繁體中文，**過去式**）。OCR 僅輔助；衝突時以 ASR 為準。
+你是一位資深的課程編輯和教學設計專家。你的核心任務是將原始的講座逐字稿**轉化、提煉、重構**為一份結構清晰、重點突出、最適合學生複習與深化理解的**終極講義與學習指南**。
+
+### 核心原則
+1.  **重構，勿抄寫 (Transform, Don't Transcribe):** 大膽地刪除贅詞、重複句和離題內容。根據邏輯重新組織內容順序，即使與原逐字稿順序不同。目標是創造最佳的**學習敘事流暢度**。
+2.  **為掃讀而設計 (Design for Scannability):** 使用清晰的標題層級、項目符號和編號列表。學生應該能在 60 秒內找到任何特定主題。
+3.  **強調可操作知識 (Emphasize Actionable Knowledge):** 突出顯示定義、步驟、命令和關鍵見解。
 
 ### 全域脈絡（Global Context）
 {global_ctx_block}
 
 ### 內容與語氣要求
-- 覆蓋所有主要核心概念，提供可操作步驟與真實案例。
-- 梳理教師的專業建議、常見錯誤、最佳做法。
-- 忽略行政/平台雜訊；必要時一語帶過。
-- 程式課程需提供可執行的程式碼區塊（```python / ```java / ```cpp / ```html 等）。
-- 字數建議 **{min_words}–{max_words}**（軟限制）。
+-   **語氣:** 專業、清晰、簡潔的書面語（過去式）。扮演總結專家講課內容的編輯角色。
+-   **建議講義結構（可靈活調整以符合課程邏輯）：**
+    -   **課程目標與概述:** 簡要說明本段課程的核心目標與學習內容。
+    -   **核心概念講解:** 對每個主要概念進行深入解釋。**所有關鍵術語必須在內容中加粗並明確定義**。
+    -   **操作指南與實例 (Step-by-Step Guide):** 這是講義的主體。將講師的操作提煉為清晰的編號列表或步驟。
+        -   **💻 對於編程課程:** 必須提取並提供**乾淨、可執行的程式碼區塊**（使用 ```python, ```java, ```html 等標記）。
+        -   **🎨 對於軟體/設計課程:** 明確說明工具位置、選單指令序列和預期效果。
+    -   **教師的專業建議 (Instructor's Know-How):** 專門整理講師提到的：
+        -   ❌ **常見錯誤與陷阱** (Common Mistakes)
+        -   ✅ **最佳實踐與技巧** (Best Practices & Pro-Tips)
+        -   💡 **真實應用場景** (Real-World Applications)
+    -   **視覺參考:** 使用提供的 OCR 文字來描述或解釋屏幕上重要的圖表、界面或簡報內容。（例如：「如投影片所示：[根據OCR描述]」）
+-   **忽略:** 行政雜訊（點名、會議ID、技術問題等）。
 
-### 輸出格式（僅 JSON）
+### 輸出格式（嚴格遵守 JSON 結構）
 ```json
 {{
   "sections": [
     {{
-      "title": "章節標題",
-      "content": "Markdown、過去式、可含代碼區塊",
-      "key_points": ["重點1", "重點2", "重點3"],
-      "examples": ["案例1", "案例2"]
+      "title": "層級化標題 (e.g., '1.1 核心概念：Python列表')",
+      "content": "結構化的Markdown內容。**將關鍵術語加粗**。使用項目列表、編號列表、圖示(❌✅💡)和程式碼區塊。遵循上述『建議講義結構』。",
+      "key_points": ["本節最核心的2-3個摘要要點", "避免冗長，保持精簡"]
     }}
   ],
-  "summary": "過去式總結與建議"
+  "summary": "全文的過去式總結，強調最重要的3-5個課程收穫和後續行動建議。",
+  "key_terms": [
+    {{ "term": "關鍵術語1", "definition": "清晰的定義" }},
+    {{ "term": "關鍵術語2", "definition": "清晰的定義" }}
+  ]
 }}
-```
 
-### 資料
+```
+字數建議: {min_words}–{max_words}（軟限制）。品質和清晰度優先於嚴格遵守字數。
+
+### 輸入資料
 ## ASR 逐字稿（主要依據）
 {transcript}
 
@@ -369,15 +719,15 @@ def build_lecture_notes_prompt_v2(
 
 # ==================== SYSTEM MESSAGES (ASR-first) ====================
 MCQ_SYSTEM_MESSAGE = (
-    "你是一位專業的出題助手。以『ASR 逐字稿』為主要依據產生題目；"
-    "『OCR 文字』僅作輔助參考，當兩者衝突時，一律以 ASR 為準。"
-    "請輸出嚴格符合指定 JSON 架構的內容，且僅輸出 JSON。"
+    "你是一位專業的教學設計專家。你的核心任務是基於對「ASR 逐字稿」的整體理解，為學生設計能測試深度知識應用的高品質多選題。"
+    "「OCR 文字」僅作輔助視覺參考。出題時須遵循 Bloom 分類法結構，並確保錯誤選項基於常見誤解。"
+    "請嚴格遵守指定的 JSON 輸出格式，且僅輸出 JSON，不做任何其他說明。"
 )
 
 NOTES_SYSTEM_MESSAGE = (
-    "你是一位專業的教學設計助手。以『ASR 逐字稿』為主要依據整理講義；"
-    "『OCR 文字』僅作輔助參考，當兩者衝突時，一律以 ASR 為準。"
-    "請嚴格輸出指定的 JSON 架構，且僅輸出 JSON。"
+    "你是一位專業的課程編輯和教學設計專家。你的任務是將原始逐字稿提煉、重構為結構清晰、極具學習價值的專業講義。"
+    "專注於深度理解與邏輯重組，而非簡單抄寫。以『ASR 逐字稿』為核心依據；『OCR 文字』僅作輔助視覺參考，衝突時以 ASR 為準。"
+    "請嚴格遵守指定的 JSON 輸出格式，且僅輸出 JSON，不做任何其他說明。"
 )
 
 # ==================== CLIENT INITIALIZATION ====================
@@ -921,7 +1271,7 @@ from typing import Union
 
 def generate_educational_content(
     raw_asr_text: str,
-    ocr_segments: Union[List[Dict], str],   # can be a string or list (backward compatible)
+    ocr_segments: Union[List[Dict], str],
     video_id: str,
     run_dir: Optional[Path] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
@@ -930,7 +1280,7 @@ def generate_educational_content(
     regenerate_explanations: bool = False,
     enforce_difficulty: bool = True,
     shuffle_seed: Optional[int] = None,
-    ocr_text_override: Optional[str] = None,  # NEW: pass your OCR text directly
+    ocr_text_override: Optional[str] = None,
 ) -> EducationalContentResult:
     """
     Main function to generate educational content from pre-processed segments.
@@ -953,22 +1303,20 @@ def generate_educational_content(
 
         transcript = (raw_asr_text)
         if ocr_text_override is not None:
-        # Use caller-provided OCR text AS-IS (no formatting, no truncation)
             ocr_context = ocr_text_override
         elif isinstance(ocr_segments, str):
-            # If caller passed OCR as a string, also use it AS-IS
             ocr_context = ocr_segments
         else:
-        # Legacy fallback: if we still receive segments, keep them raw (no bullets/timestamps)
-        # Join only the 'text' fields in order, no extra formatting.
             ocr_context = "\n".join(
                 (seg.get("text") or "").strip()
                 for seg in (ocr_segments or [])
                 if (seg.get("text") or "").strip()
             )
+        
         logger.info(f"ASR-first policy active. Generating {config.max_questions} MCQs and {config.max_notes_pages}p notes.")
         logger.info(f"Preprocessed transcript chars: {len(transcript)}, OCR context chars: {len(ocr_context)}")
 
+        # Save input files
         with open(run_dir / "raw_asr_text.txt", "w", encoding="utf-8") as f:
             f.write(raw_asr_text)
         with open(run_dir / "preprocessed_transcript.txt", "w", encoding="utf-8") as f:
@@ -988,7 +1336,65 @@ def generate_educational_content(
         }
         ctx_budget = MODEL_BUDGETS.get(model, 100_000)
 
-        # ---------- MCQs ----------
+        # ========================================================================
+        # NEW SECTION: Topic Extraction and Summary Generation
+        # ========================================================================
+        report("generating_topics_summary", progress_callback)
+        logger.info("📊 Extracting topics and generating global summary")
+        
+        # Calculate budget for topic extraction
+        topics_prompt_template_tokens = count_tokens_llama(
+            build_topics_summary_prompt(transcript="", context=None)
+        )
+        topics_budget = max(2_000, ctx_budget - topics_prompt_template_tokens)
+        topics_transcript = truncate_text_by_tokens(transcript, topics_budget)
+        
+        # Build context (optional)
+        topics_context = {
+            "視頻ID": video_id,
+            "內容類型": "教學視頻"
+        }
+        
+        # Generate topics prompt
+        topics_prompt = build_topics_summary_prompt(
+            transcript=topics_transcript,
+            context=topics_context
+        )
+        
+        logger.info(f"Topics extraction prompt approx tokens: {count_tokens_llama(topics_prompt):,}")
+        
+        # Call LLM for topics extraction
+        topics_response = call_llm(
+            service_type=service_type,
+            client=client,
+            system_message=TOPICS_SUMMARY_SYSTEM_MESSAGE,
+            user_message=topics_prompt,
+            model=model,
+            max_tokens=2048,  # Topics don't need as many tokens as MCQs
+            temperature=0.15,   # Slightly higher for creativity in summary
+            top_p=0.9
+        )
+        
+        # Parse the response
+        topics_output = extract_text_from_response(topics_response, service_type)
+        topics_list, global_summary, key_takeaways = parse_topics_summary_response(topics_output)
+        
+        # Log extraction results
+        logger.info(f"✅ Extracted {len(topics_list)} topics with global summary")
+        if key_takeaways:
+            logger.info(f"✅ Identified {len(key_takeaways)} key takeaways")
+        
+        # Save topics to file for debugging
+        with open(run_dir / "extracted_topics.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "topics": topics_list,
+                "global_summary": global_summary,
+                "key_takeaways": key_takeaways
+            }, f, ensure_ascii=False, indent=2)
+        
+        # ========================================================================
+        # UPDATED: MCQ Generation with Topics and Summary
+        # ========================================================================
         report("generating_mcqs", progress_callback)
 
         mcq_prompt_template_tokens = count_tokens_llama(build_mcq_prompt_v2(
@@ -996,20 +1402,21 @@ def generate_educational_content(
             ocr_context=ocr_context,
             num_questions=config.max_questions,
             chapters=None,
-            global_summary="",
+            global_summary=global_summary,  # ← NOW USING EXTRACTED SUMMARY
         ))
         mcq_budget = max(2_000, ctx_budget - mcq_prompt_template_tokens)
         mcq_transcript = truncate_text_by_tokens(transcript, mcq_budget)
+        
         final_mcq_prompt = build_mcq_prompt_v2(
             transcript=mcq_transcript,
             ocr_context=ocr_context,
             num_questions=config.max_questions,
             chapters=None,
-            global_summary="",
+            global_summary=global_summary,  # ← NOW USING EXTRACTED SUMMARY
         )
 
         logger.info(f"MCQ prompt approx tokens: {count_tokens_llama(final_mcq_prompt):,}")
-        logger.info(f"📚 Generating {config.max_questions} MCQs with ASR-first policy")
+        logger.info(f"📚 Generating {config.max_questions} MCQs with ASR-first policy and topic context")
 
         mcq_response = call_llm(
             service_type=service_type,
@@ -1024,7 +1431,7 @@ def generate_educational_content(
         mcq_output = extract_text_from_response(mcq_response, service_type)
         mcqs = parse_mcq_response(mcq_output, force_traditional=config.force_traditional)
 
-        # 🔽 Post-processing (using function parameters)
+        # Post-processing
         mcqs = postprocess_mcqs(
             mcqs,
             shuffle=shuffle_options,
@@ -1037,7 +1444,9 @@ def generate_educational_content(
             force_traditional=config.force_traditional
         )
 
-        # ---------- Lecture Notes ----------
+        # ========================================================================
+        # UPDATED: Lecture Notes Generation with Topics and Summary
+        # ========================================================================
         report("generating_notes", progress_callback)
 
         notes_prompt_template_tokens = count_tokens_llama(build_lecture_notes_prompt_v2(
@@ -1045,21 +1454,22 @@ def generate_educational_content(
             ocr_context=ocr_context,
             num_pages=config.max_notes_pages,
             chapters=None,
-            topics=None,
-            global_summary="",
+            topics=topics_list,           # ← NOW USING EXTRACTED TOPICS
+            global_summary=global_summary, # ← NOW USING EXTRACTED SUMMARY
         ))
         notes_budget = max(2_000, ctx_budget - notes_prompt_template_tokens)
         notes_transcript = truncate_text_by_tokens(transcript, notes_budget)
+        
         notes_prompt = build_lecture_notes_prompt_v2(
             transcript=notes_transcript,
             ocr_context=ocr_context,
             num_pages=config.max_notes_pages,
             chapters=None,
-            topics=None,
-            global_summary="",
+            topics=topics_list,           # ← NOW USING EXTRACTED TOPICS
+            global_summary=global_summary, # ← NOW USING EXTRACTED SUMMARY
         )
 
-        logger.info(f"📘 Generating {config.max_notes_pages} pages of lecture notes with ASR-first policy")
+        logger.info(f"📘 Generating {config.max_notes_pages} pages of lecture notes with topic structure")
 
         notes_response = call_llm(
             service_type=service_type,
@@ -1074,15 +1484,20 @@ def generate_educational_content(
         notes_output = extract_text_from_response(notes_response, service_type)
         lecture_sections, summary = parse_lecture_notes_response(notes_output, force_traditional=config.force_traditional)
 
+        # ========================================================================
+        # Rest of the function remains the same
+        # ========================================================================
         report("processing_results", progress_callback)
 
         result = EducationalContentResult(
             mcqs=mcqs,
             lecture_notes=lecture_sections,
-            summary=summary
+            summary=summary,
+            topics=topics_list,           
+            key_takeaways=key_takeaways
         )
 
-        # ---------- Optional caching ----------
+        # Optional caching
         if config.enable_cache:
             cache_dir = run_dir / "cache"
             cache_dir.mkdir(exist_ok=True)
@@ -1093,16 +1508,20 @@ def generate_educational_content(
             with open(cache_dir / f"{notes_key}.json", "w", encoding="utf-8") as f:
                 json.dump({"sections": [vars(s) for s in lecture_sections], "summary": summary}, f, ensure_ascii=False, indent=2)
 
-        # persist raw LLM outputs & final results
+        # Persist raw LLM outputs & final results
         with open(run_dir / "mcq_response.txt", "w", encoding="utf-8") as f:
             f.write(mcq_output)
         with open(run_dir / "notes_response.txt", "w", encoding="utf-8") as f:
             f.write(notes_output)
+        with open(run_dir / "topics_response.txt", "w", encoding="utf-8") as f:
+            f.write(topics_output)  # ← SAVE TOPICS RESPONSE TOO
         with open(run_dir / "final_result.json", "w", encoding="utf-8") as f:
             json.dump({
                 "mcqs": [vars(mcq) for mcq in mcqs],
                 "lecture_notes": [vars(section) for section in lecture_sections],
-                "summary": summary
+                "summary": summary,
+                "topics": topics_list,  # ← INCLUDE TOPICS IN FINAL OUTPUT
+                "key_takeaways": key_takeaways  # ← INCLUDE KEY TAKEAWAYS TOO
             }, f, ensure_ascii=False, indent=2)
 
         report("completed", progress_callback)
@@ -1112,8 +1531,6 @@ def generate_educational_content(
     except Exception as e:
         logger.error(f"Educational content generation failed: {e}", exc_info=True)
         raise
-
-# ---- Adapter for tasks.py compatibility ----
 
 # ---- Adapter for tasks.py compatibility ----
 
