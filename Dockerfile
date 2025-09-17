@@ -75,9 +75,9 @@ RUN python -m pip install --no-cache-dir \
 
 # Install PaddlePaddle and PaddleOCR
 RUN python -m pip install --no-cache-dir \
-    paddlepaddle-gpu==2.6.1 \
+    paddlepaddle-gpu==2.5.1 \
     -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html && \
-    python -m pip install --no-cache-dir paddleocr==2.6.1
+    python -m pip install --no-cache-dir paddleocr==2.7.0
 
 # Install VisualDL
 RUN python -m pip install --no-cache-dir visualdl==2.5.3
