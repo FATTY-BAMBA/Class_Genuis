@@ -3,7 +3,7 @@ import re
 import logging
 import torch
 from faster_whisper import WhisperModel
-from src.data.chapters import sec_to_hms
+from chapter_llama.src.data.chapters import sec_to_hms
 
 _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 _DEFAULT_COMPUTE = "float16" if _DEVICE == "cuda" else "int8"
