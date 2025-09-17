@@ -12,14 +12,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
 
 # ==================== SYSTEM DEPENDENCIES ====================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-dev python3-pip python3.10-distutils \
-    build-essential cmake git curl ca-certificates \
-    wget nodejs npm patchelf execstack \
-    libcairo2-dev libjpeg-dev libgif-dev pkg-config \
-    libopenblas-dev libssl-dev && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        software-properties-common \
+        build-essential cmake git curl ca-certificates wget \
+        libcairo2-dev libjpeg-dev libgif-dev pkg-config \
+        libopenblas-dev libssl-dev patchelf && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 python3.10-dev python3.10-distutils python3.10-venv \
+        python3-pip && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # ==================== PYTHON SETUP ====================
@@ -91,13 +99,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}
 
 # ==================== RUNTIME DEPENDENCIES ====================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-distutils \
-    ffmpeg redis-server redis-tools \
-    libsndfile1 libgl1 libgomp1 libglib2.0-0 \
-    libsm6 libxext6 libxrender1 libcairo2 \
-    curl aria2 netcat-openbsd procps net-tools lsof \
-    patchelf execstack && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 python3.10-distutils \
+        ffmpeg redis-server redis-tools \
+        libsndfile1 libgl1 libgomp1 libglib2.0-0 \
+        libsm6 libxext6 libxrender1 libcairo2 \
+        curl aria2 netcat-openbsd procps net-tools lsof \
+        patchelf && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
@@ -111,8 +125,8 @@ WORKDIR /app
 COPY . .
 
 # Fix numpy.int deprecation
-RUN echo "import numpy as np; np.int = int if not hasattr(np, 'int') else np.int" > /usr/local/lib/python3.10/dist-packages/numpy_patch.py && \
-    echo "try: import numpy_patch\nexcept: pass" >> /usr/local/lib/python3.10/dist-packages/sitecustomize.py
+RUN echo "import numpy as np; np.int = int if not hasattr(np, 'int') else np.int" > /usr/local/lib/python3.10/dist-packages/numpy_patch.py || true && \
+    echo "try: import numpy_patch\nexcept: pass" >> /usr/local/lib/python3.10/dist-packages/sitecustomize.py || true
 
 # ==================== CREATE NON-ROOT USER ====================
 RUN useradd -ms /bin/bash appuser && \
