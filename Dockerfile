@@ -73,7 +73,7 @@ RUN python -m pip install --no-cache-dir \
     ctranslate2==3.24.0 \
     transformers==4.36.2
 
-# Install PaddlePaddle and PaddleOCR
+# Install PaddlePaddle and PaddleOCR (compatible versions)
 RUN python -m pip install --no-cache-dir \
     paddlepaddle-gpu==2.5.1 \
     -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html && \
@@ -106,9 +106,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}
 
 # ==================== RUNTIME DEPENDENCIES ====================
+# Add NVIDIA package repository for cudnn
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        software-properties-common && \
+        software-properties-common gnupg wget && \
+    wget -qO - https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub | apt-key add - && \
+    add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /" && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -117,7 +120,8 @@ RUN apt-get update && \
         libsndfile1 libgl1 libgomp1 libglib2.0-0 \
         libsm6 libxext6 libxrender1 libcairo2 \
         curl aria2 netcat-openbsd procps net-tools lsof \
-        patchelf && \
+        patchelf \
+        libcudnn8 && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
@@ -126,6 +130,9 @@ RUN apt-get update && \
 # ==================== COPY PYTHON ENVIRONMENT ====================
 COPY --from=builder /usr/local/lib/python3.10 /usr/local/lib/python3.10
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# ==================== FIX LIBRARY PATHS ====================
+RUN ldconfig /usr/local/cuda/lib64
 
 # ==================== APPLICATION ====================
 WORKDIR /app
