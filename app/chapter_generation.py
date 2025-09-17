@@ -185,34 +185,37 @@ def _normalize_ts(ts: str) -> str:
 def parse_chapters_from_output(output_text: str) -> Dict[str, str]:
     """Parse chapter timestamps and titles from LLM output"""
     chapters: Dict[str, str] = {}
+    
+    # Direct parsing for "HH:MM:SS - Title" format
     for line in output_text.splitlines():
         line = line.strip()
         if not line:
             continue
-        m = CHAPTER_LINE_RE.match(line)
-        if not m:
-            continue
-        ts = _normalize_ts(m.group("ts").strip())
-        title = m.group("title").strip()
-        if title:
-            chapters.setdefault(ts, title)
-    if chapters:
-        return chapters
-
-    # Loose fallback: try to salvage lines with timestamps anywhere
-    tmp: Dict[str, str] = {}
-    for line in output_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        m = re.search(r"(\d{1,2}:\d{2}(?::\d{2})?)", line)
-        if not m:
-            continue
-        ts = _normalize_ts(m.group(1))
-        title = line[m.end():].lstrip(" -–—:\t").strip() or line[:m.start()].strip()
-        if title:
-            tmp.setdefault(ts, title)
-    return tmp
+        
+        # Look for the pattern "HH:MM:SS - Title"
+        if ' - ' in line:
+            parts = line.split(' - ', 1)
+            if len(parts) == 2:
+                ts = parts[0].strip()
+                title = parts[1].strip()
+                # Validate timestamp format
+                if re.match(r'\d{2}:\d{2}:\d{2}', ts):
+                    chapters[ts] = title
+    
+    # If no chapters found, try the original regex approach
+    if not chapters:
+        for line in output_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            m = CHAPTER_LINE_RE.match(line)
+            if m:
+                ts = _normalize_ts(m.group("ts").strip())
+                title = m.group("title").strip()
+                if title:
+                    chapters.setdefault(ts, title)
+    
+    return chapters
 
 def globally_balance_chapters(
     chapters: Dict[str, str],
@@ -522,7 +525,7 @@ def generate_chapters_debug(
             ocr_context = build_ocr_context_from_segments(ocr_segments) if ocr_segments else ""
 
         min_gap_sec, target_range, max_caps = chapter_policy(int(duration))
-
+        
         # Save raw inputs (for debugging/auditing)
         with open(run_dir / "raw_asr_text.txt", "w", encoding="utf-8") as f:
             f.write(raw_asr_text)
