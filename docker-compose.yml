@@ -24,7 +24,7 @@ services:
       - WHISPER_MODEL=large-v2
       - CELERY_LOGLEVEL=INFO
       - LOG_LEVEL=INFO
-      - OCR_GPU=true  # Explicitly enable GPU for OCR
+      - OCR_GPU=false  # Explicitly enable GPU for OCR
       - LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH  # Ensure library paths
     depends_on:
       redis:
