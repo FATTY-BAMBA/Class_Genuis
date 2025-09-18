@@ -103,10 +103,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GLOG_logtostderr=0 \
     FLAGS_fraction_of_gpu_memory_to_use=0.9 \
     CUDA_VISIBLE_DEVICES=0 \
-    LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH} \
-    CUDNN_PATH=/usr/lib/x86_64-linux-gnu
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}
 
 # ==================== RUNTIME DEPENDENCIES ====================
+# The runtime image already has cuDNN and CUDA libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         software-properties-common && \
@@ -118,31 +118,20 @@ RUN apt-get update && \
         libsndfile1 libgl1 libgomp1 libglib2.0-0 \
         libsm6 libxext6 libxrender1 libcairo2 \
         curl aria2 netcat-openbsd procps net-tools lsof \
-        patchelf \
-        libcublas-11-8 \
-        libcublaslt-11-8 \
-        libnvinfer8 && \
+        patchelf && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
+    ldconfig && \
     rm -rf /var/lib/apt/lists/*
 
 # ==================== COPY PYTHON ENVIRONMENT ====================
 COPY --from=builder /usr/local/lib/python3.10 /usr/local/lib/python3.10
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# ==================== FIX CUDA/cuDNN LIBRARY PATHS ====================
-# This is critical for PaddlePaddle GPU support
-RUN ldconfig && \
-    # Find and link cuDNN libraries
-    find /usr -name "libcudnn.so*" 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/local/cuda/lib64/libcudnn.so || true && \
-    find /usr -name "libcudnn.so.8*" 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/local/cuda/lib64/libcudnn.so.8 || true && \
-    # Find and link cuBLAS libraries  
-    find /usr -name "libcublas.so*" 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/local/cuda/lib64/libcublas.so || true && \
-    find /usr -name "libcublasLt.so*" 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/local/cuda/lib64/libcublasLt.so || true && \
-    # Update library cache
-    echo "/usr/local/cuda/lib64" >> /etc/ld.so.conf.d/cuda.conf && \
-    ldconfig
+# ==================== FIX LIBRARY PATHS ====================
+# Ensure CUDA libraries are accessible
+RUN ldconfig /usr/local/cuda/lib64
 
 # ==================== APPLICATION ====================
 WORKDIR /app
@@ -153,19 +142,13 @@ RUN echo "import numpy as np; np.int = int if not hasattr(np, 'int') else np.int
     echo "try: import numpy_patch\nexcept: pass" >> /usr/local/lib/python3.10/dist-packages/sitecustomize.py || true
 
 # ==================== CREATE NON-ROOT USER ====================
-# Note: We need to ensure the appuser can access CUDA libraries
 RUN useradd -ms /bin/bash appuser && \
     mkdir -p /app/uploads /app/segments /workspace/logs /workspace/models /workspace/uploads && \
     chown -R appuser:appuser /app /workspace && \
-    chmod +x /app/start.sh && \
-    # Allow appuser to access CUDA libraries
-    usermod -a -G video appuser || true
+    chmod +x /app/start.sh
 
 # ==================== SWITCH TO NON-ROOT ====================
 USER appuser
-
-# Set LD_LIBRARY_PATH for the appuser as well
-ENV LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${LD_LIBRARY_PATH}
 
 EXPOSE 5000 8888
 
