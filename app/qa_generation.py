@@ -730,6 +730,11 @@ NOTES_SYSTEM_MESSAGE = (
     "請嚴格遵守指定的 JSON 輸出格式，且僅輸出 JSON，不做任何其他說明。"
 )
 
+TOPICS_SUMMARY_SYSTEM_MESSAGE = (
+    "你是一位專業的教育內容分析助手。"
+    "請從教學內容中提取主要主題和概念，並提供簡潔的摘要。"
+    "請嚴格輸出指定的 JSON 架構，且僅輸出 JSON。"
+)
 # ==================== CLIENT INITIALIZATION ====================
 def initialize_client(service_type: str, **kwargs) -> Any:
     """Initialize the appropriate LLM client"""
