@@ -448,33 +448,62 @@ def build_prompt_body(
     duration_sec: int,
     ocr_context: str = "",
 ) -> str:
-    """Build the prompt for chapter generation (ASR as the primary source)."""
+    """Build HIGH-QUALITY educational chapter prompt (ASR as primary source)."""
+    
     duration_hms = sec_to_hms(int(duration_sec))
     min_gap_sec, (t_low, t_high), max_caps = chapter_policy(int(duration_sec))
-    intro = (
-        "你是一位資深的教育內容編輯專家。你的任務是為以下影片逐字稿生成清晰、專業且簡潔的 YouTube 章節標題（**繁體中文**）。\n\n"
-        f"影片總長度：{duration_hms}。請生成 **{t_low}–{t_high} 個章節**（最多 {max_caps} 個）。\n"
-        f"每個章節間隔至少 **{min_gap_sec//60} 分鐘**（若主題延續請勿切分）。\n\n"
-        "## 分析步驟：\n"
-        "1.  **辨識主題：** 以 ASR 逐字稿為主要依據" + ("，並參考螢幕文字（OCR）" if ocr_context else "") + "。\n"
-        "2.  **提取關鍵主題：** 找出影片中所教授的主要課程、模組或技能。\n"
-        "3.  **創建章節標題：** 用清晰的標題總結每個段落，反映其核心教學價值。\n\n"
-    )
-    asr_block = (
-        "## 輸出格式要求（必須嚴格遵守）：\n"
-        "`HH:MM:SS - 標題`（不要編號、不要額外說明、不要裝飾符號）\n\n"
-        "## 實際影片逐字稿內容（原始 ASR，作為主要依據）：\n"
-        f"{transcript}\n\n"
-    )
-    ocr_block = ""
-    if ocr_context.strip():
-        # OCR is appended verbatim (no extra processing). Kept under a heading for clarity.
-        ocr_block = (
-            "## 螢幕文字輔助資訊（OCR，僅作輔助參考）：\n"
-            f"{ocr_context}\n\n"
-        )
-    # Always put ASR first if present; OCR after.
-    return intro + asr_block + ocr_block
+    
+    prompt = f"""
+# 角色與任務
+你是資深線上課程設計專家，負責將教學影片內容轉化為專業的教育章節結構。
+
+# 影片資訊
+- 總時長: {duration_hms}
+- 目標章節: {t_low}-{t_high} 個主要學習單元
+- 最小間隔: {min_gap_sec//60} 分鐘
+
+# 教育章節設計原則
+## 1. 學習價值優先
+- 每個章節應代表一個**完整的學習概念**或**技能單元**
+- 聚焦於**學生將學到什麼**而非**講師在做什麼**
+- 反映真正的**教育進程**而非機械操作步驟
+
+## 2. 專業學科術語
+- 自動識別課程領域並使用**適當的專業術語**
+- 保持語言**準確、行業認可、教育適當**
+- 根據內容複雜度調整術語深度（初級→高級）
+
+## 3. 避免重複模式
+❌ 避免「介紹/實作/測試/完成」的機械模式
+❌ 避免「功能一/功能二/功能三」的流水帳
+✅ 使用「概念→原理→應用→優化」的教育邏輯
+✅ 使用「基礎→進階→實戰→整合」的學習路徑
+
+## 4. 適當抽象層級
+- **初級課程**: 具體技能、操作步驟、基礎概念
+- **中級課程**: 模式理解、最佳實踐、原理分析  
+- **高級課程**: 架構設計、優化策略、行業應用
+
+# 輸出格式
+嚴格遵守: `HH:MM:SS - 章節標題`
+- 標題: 繁體中文，使用專業教育術語
+- 時間: HH:MM:SS 格式
+- 純文字清單，無編號、無額外說明
+
+# 內容分析指南
+1. 識別核心教學主題和學習里程碑
+2. 確定自然的教育斷點和知識邊界  
+3. 為每個段落創建反映學習成果的標題
+4. 確保章節間的邏輯連貫性和教育遞進性
+
+# 教學內容
+## 主要逐字稿:
+{transcript}
+
+## 輔助參考:
+{ocr_context if ocr_context else "（無螢幕內容參考）"}
+"""
+    return prompt
 
 # ─────────────────────────
 # MAIN FUNCTIONS
@@ -576,11 +605,10 @@ def generate_chapters_debug(
 
         # Call LLM — ASR-first priority
         enhanced_system_message = (
-            "你是一個協助創建影片章節的助手。"
-            "以『ASR 逐字稿』為主要依據產生章節；"
-            "『OCR 文字』僅作為輔助參考，當與 ASR 衝突時，一律以 ASR 為準。"
-            "請『只輸出』章節清單，每行格式：`HH:MM:SS - 標題`（繁體中文）。"
-            "回應中請勿包含任何其他文字、評論或解釋。"
+            "你是專業的線上課程設計專家，擅長為各種學科創建高品質的教育章節結構。"
+            "你能自動識別課程領域並使用適當的專業術語，專注於學習價值而非機械操作。"
+            "避免重複模式，創建反映真正教育進程的章節標題。"
+            "僅輸出章節清單，每行格式: `HH:MM:SS - 標題`（繁體中文）。"
         )
 
         logger.info(f"Calling {service_type} API for chapter generation...")
