@@ -110,7 +110,38 @@ class EducationalContentResult:
     summary: str
     topics: List[Dict] = field(default_factory=list)          # ← NEW
     key_takeaways: List[str] = field(default_factory=list)    # ← NEW
+# ==================== PYDANTIC MODELS FOR VALIDATION ====================
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional
 
+class ValidatedLectureSection(BaseModel):
+    """Pydantic model for validated lecture sections"""
+    title: str = Field(..., min_length=1, max_length=300)
+    content: str = Field(..., min_length=10, max_length=10000)
+    key_points: List[str] = Field(default_factory=list, max_length=10)
+    examples: List[str] = Field(default_factory=list, max_length=5)
+    
+    @field_validator('key_points', 'examples', mode='before')
+    @classmethod
+    def ensure_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        if not isinstance(v, list):
+            return []
+        # Filter out empty strings and ensure all items are strings
+        return [str(item).strip() for item in v if item and str(item).strip()]
+
+class ValidatedLectureNotes(BaseModel):
+    """Pydantic model for complete lecture notes response"""
+    sections: List[ValidatedLectureSection] = Field(..., min_length=1, max_length=20)
+    summary: str = Field(..., min_length=10, max_length=1000)
+    
+    class Config:
+        extra = 'ignore'  # Ignore unexpected fields
+        str_strip_whitespace = True  # Auto strip whitespace
+        
 # ==================== UTILITIES ====================
 def sec_to_hms(sec: int) -> str:
     """Convert seconds to HH:MM:SS format"""
@@ -753,6 +784,7 @@ def initialize_client(service_type: str, **kwargs) -> Any:
         raise ValueError(f"Unknown service type: {service_type}")
 
 # ==================== LLM API CALLS ====================
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -767,10 +799,12 @@ def call_llm(
     model: str,
     max_tokens: int = 4096,
     temperature: float = 0.2,
-    top_p: float = 0.9
+    top_p: float = 0.9,
+    force_json: bool = False  # NEW PARAMETER
 ) -> Any:
-    """Call LLM API with retry logic"""
+    """Call LLM API with retry logic and optional JSON format enforcement"""
     if service_type == "azure":
+        # Azure doesn't support response_format yet
         return client.complete(
             messages=[
                 SystemMessage(content=system_message),
@@ -782,16 +816,24 @@ def call_llm(
             model=model
         )
     elif service_type == "openai":
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
+        # Build kwargs
+        kwargs = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message}
             ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p
-        )
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p
+        }
+        
+        # Add JSON format enforcement if requested
+        if force_json and model in ["gpt-4o", "gpt-4-turbo-preview", "gpt-3.5-turbo-1106"]:
+            kwargs["response_format"] = {"type": "json_object"}
+            logger.info("Using JSON format enforcement for OpenAI API")
+        
+        response = client.chat.completions.create(**kwargs)
         return response
     else:
         raise ValueError(f"Unknown service type: {service_type}")
@@ -903,7 +945,187 @@ def parse_lecture_notes_response(response_text: str, force_traditional: bool = T
     if force_traditional:
         summary = to_traditional(summary)
     return sections, summary
+def parse_lecture_notes_with_validation(
+    response_text: str,
+    force_traditional: bool = True,
+    run_dir: Optional[Path] = None
+) -> Tuple[List[LectureNoteSection], str]:
+    """
+    Parse lecture notes using Pydantic validation for guaranteed structure.
+    Never fails - always returns valid data.
+    """
+    sections: List[LectureNoteSection] = []
+    summary: str = ""
+    
+    try:
+        # Step 1: Extract JSON from response
+        json_text = response_text.strip()
+        
+        # Handle markdown code blocks
+        if "```json" in json_text:
+            match = re.search(r"```json\s*(.*?)\s*```", json_text, re.DOTALL)
+            if match:
+                json_text = match.group(1)
+        elif "```" in json_text:
+            match = re.search(r"```\s*(.*?)\s*```", json_text, re.DOTALL)
+            if match:
+                json_text = match.group(1)
+        
+        # Step 2: Parse JSON
+        data = json.loads(json_text)
+        
+        # Step 3: Validate with Pydantic
+        validated = ValidatedLectureNotes(**data)
+        
+        # Step 4: Convert to your dataclass format
+        for section in validated.sections:
+            title = section.title
+            content = section.content
+            key_points = section.key_points
+            examples = section.examples
+            
+            # Apply Traditional Chinese conversion if needed
+            if force_traditional:
+                title = to_traditional(title)
+                content = to_traditional(content)
+                key_points = [to_traditional(kp) for kp in key_points]
+                examples = [to_traditional(ex) for ex in examples]
+            
+            sections.append(LectureNoteSection(
+                title=title,
+                content=content,
+                key_points=key_points,
+                examples=examples
+            ))
+        
+        summary = validated.summary
+        if force_traditional:
+            summary = to_traditional(summary)
+            
+        logger.info(f"Successfully validated {len(sections)} lecture sections")
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing failed at position {e.pos}: {e.msg}")
+        if run_dir:
+            error_file = run_dir / "notes_json_error.txt"
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write(f"JSON Error: {e}\n\nRaw response:\n{response_text}")
+        
+        # Create fallback content from raw text
+        sections, summary = _create_fallback_notes(response_text, force_traditional)
+        
+    except ValidationError as e:
+        logger.error(f"Pydantic validation failed: {e}")
+        if run_dir:
+            error_file = run_dir / "notes_validation_error.txt"
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write(f"Validation Error: {e}\n\nRaw response:\n{response_text}")
+        
+        # Try to use partial data if available
+        try:
+            if isinstance(data, dict):
+                sections, summary = _extract_partial_notes(data, force_traditional)
+            else:
+                sections, summary = _create_fallback_notes(response_text, force_traditional)
+        except:
+            sections, summary = _create_fallback_notes(response_text, force_traditional)
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in lecture notes parsing: {e}")
+        sections, summary = _create_fallback_notes(response_text, force_traditional)
+    
+    # Ensure we always have at least one section
+    if not sections:
+        sections = [LectureNoteSection(
+            title="講義內容",
+            content="無法生成完整講義內容",
+            key_points=["請參考課程錄影"],
+            examples=[]
+        )]
+    
+    if not summary:
+        summary = "講義摘要生成中發生錯誤"
+    
+    return sections, summary
 
+def _extract_partial_notes(
+    data: dict,
+    force_traditional: bool
+) -> Tuple[List[LectureNoteSection], str]:
+    """Extract whatever valid data we can from partial response"""
+    sections = []
+    
+    # Try to extract sections
+    if 'sections' in data and isinstance(data['sections'], list):
+        for section_data in data['sections'][:10]:  # Limit to 10 sections
+            if not isinstance(section_data, dict):
+                continue
+                
+            try:
+                # Use defaults for missing fields
+                title = str(section_data.get('title', '未命名章節'))[:300]
+                content = str(section_data.get('content', ''))[:10000]
+                key_points = section_data.get('key_points', [])
+                examples = section_data.get('examples', [])
+                
+                # Ensure lists
+                if not isinstance(key_points, list):
+                    key_points = [str(key_points)] if key_points else []
+                if not isinstance(examples, list):
+                    examples = [str(examples)] if examples else []
+                
+                # Limit list sizes
+                key_points = [str(kp) for kp in key_points[:10] if kp]
+                examples = [str(ex) for ex in examples[:5] if ex]
+                
+                if force_traditional:
+                    title = to_traditional(title)
+                    content = to_traditional(content)
+                    key_points = [to_traditional(kp) for kp in key_points]
+                    examples = [to_traditional(ex) for ex in examples]
+                
+                if title or content:
+                    sections.append(LectureNoteSection(
+                        title=title,
+                        content=content,
+                        key_points=key_points,
+                        examples=examples
+                    ))
+            except Exception as e:
+                logger.debug(f"Failed to extract section: {e}")
+                continue
+    
+    # Extract summary
+    summary = str(data.get('summary', ''))[:1000]
+    if force_traditional:
+        summary = to_traditional(summary)
+    
+    return sections, summary
+
+def _create_fallback_notes(
+    response_text: str,
+    force_traditional: bool
+) -> Tuple[List[LectureNoteSection], str]:
+    """Create minimal notes from raw text when all parsing fails"""
+    # Try to extract any meaningful content from the response
+    content = response_text[:5000]  # Use first 5000 chars
+    
+    if force_traditional:
+        content = to_traditional(content)
+    
+    sections = [
+        LectureNoteSection(
+            title="講義內容（自動生成）" if force_traditional else "Lecture Notes (Auto-generated)",
+            content=content,
+            key_points=["系統自動提取的內容，可能不完整"],
+            examples=[]
+        )
+    ]
+    
+    summary = "由於格式錯誤，系統自動生成了基本講義內容" if force_traditional else "Basic notes auto-generated due to format error"
+    
+    return sections, summary
+    
 # ==================== ANSWER DISTRIBUTION & POST-PROCESSING ====================
 def regenerate_explanation_with_llm(
     mcq: MCQ,
@@ -1454,40 +1676,53 @@ def generate_educational_content(
         # ========================================================================
         report("generating_notes", progress_callback)
 
+        # Build the notes prompt (same as before)
         notes_prompt_template_tokens = count_tokens_llama(build_lecture_notes_prompt_v2(
             transcript="",
             ocr_context=ocr_context,
             num_pages=config.max_notes_pages,
             chapters=None,
-            topics=topics_list,           # ← NOW USING EXTRACTED TOPICS
-            global_summary=global_summary, # ← NOW USING EXTRACTED SUMMARY
+            topics=topics_list,
+            global_summary=global_summary,
         ))
         notes_budget = max(2_000, ctx_budget - notes_prompt_template_tokens)
         notes_transcript = truncate_text_by_tokens(transcript, notes_budget)
-        
+
         notes_prompt = build_lecture_notes_prompt_v2(
             transcript=notes_transcript,
             ocr_context=ocr_context,
             num_pages=config.max_notes_pages,
             chapters=None,
-            topics=topics_list,           # ← NOW USING EXTRACTED TOPICS
-            global_summary=global_summary, # ← NOW USING EXTRACTED SUMMARY
+            topics=topics_list,
+            global_summary=global_summary,
         )
+        logger.info(f"📘 Generating {config.max_notes_pages} pages of lecture notes with validation")
 
-        logger.info(f"📘 Generating {config.max_notes_pages} pages of lecture notes with topic structure")
-
+        # Call LLM with JSON format enforcement (if using OpenAI)
         notes_response = call_llm(
             service_type=service_type,
             client=client,
             system_message=NOTES_SYSTEM_MESSAGE,
             user_message=notes_prompt,
             model=model,
-            max_tokens=4096,
+            max_tokens=8096,
             temperature=0.2,
-            top_p=0.9
+            top_p=0.9,
+            force_json=(service_type == "openai")  # Enable JSON format for OpenAI
         )
         notes_output = extract_text_from_response(notes_response, service_type)
-        lecture_sections, summary = parse_lecture_notes_response(notes_output, force_traditional=config.force_traditional)
+
+        # Save raw response for debugging
+        with open(run_dir / "notes_response.txt", "w", encoding="utf-8") as f:
+            f.write(notes_output)
+            
+        # Use the new validation-based parsing
+        lecture_sections, summary = parse_lecture_notes_with_validation(
+            notes_output,
+            force_traditional=config.force_traditional,
+            run_dir=run_dir
+        )
+        logger.info(f"✅ Generated {len(lecture_sections)} validated lecture sections")
 
         # ========================================================================
         # Rest of the function remains the same
