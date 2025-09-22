@@ -131,7 +131,7 @@ def clean_chapter_titles(chapters: Dict[str, str]) -> Dict[str, str]:
         if 0 < len(title) < 4:
             title = original_title.strip()
 
-        cleaned[ts] = title
+        cleaned[ts] = title 
     return cleaned
 
 def count_tokens_llama(text: str) -> int:
@@ -449,60 +449,297 @@ def build_prompt_body(
     duration_sec: int,
     ocr_context: str = "",
 ) -> str:
-    """Build HIGH-QUALITY educational chapter prompt (ASR as primary source)."""
-    
     duration_hms = sec_to_hms(int(duration_sec))
     min_gap_sec, (t_low, t_high), max_caps = chapter_policy(int(duration_sec))
     
+    # Extract first and last timestamps for concrete examples
+    timestamps = []
+    for line in transcript.split('\n'):
+        if ':' in line and len(line.split(':')) >= 4:
+            ts_part = ':'.join(line.split(':')[:3])
+            if re.match(r'\d{2}:\d{2}:\d{2}', ts_part):
+                timestamps.append(ts_part)
+    
+    first_ts = timestamps[0] if timestamps else "00:00:00"
+    last_ts = timestamps[-1] if timestamps else duration_hms
+    
     prompt = f"""
-# 教育章節設計專家
+# 教育章節設計專家 - 時間戳記精準對應版
 你是資深線上課程設計專家，負責將教學影片轉化為專業教育章節結構。
+
+# 🚨 最重要的規則 - 時間戳記必須精準對應
+**逐字稿實際時間範圍：{first_ts} 到 {last_ts}**
+
+## 絕對禁止的行為：
+❌ 生成 00:00:00 章節（除非逐字稿真的從 00:00:00 開始）
+❌ 規律時間間隔：每15分鐘、每30分鐘等固定模式
+❌ 憑空想像時間點（必須對應逐字稿中的實際時間戳）
+❌ 忽略逐字稿的時間範圍
+
+## 必須遵守的規則：
+✅ 第一個章節時間 >= {first_ts}（逐字稿開始時間）
+✅ 最後一個章節時間 <= {last_ts}（逐字稿結束時間）  
+✅ 每個章節時間必須接近逐字稿中實際討論該主題的時間戳（±60秒內）
+✅ 基於內容自然轉折點，而非固定間隔
+
+# 如何找到真實的章節轉折點：
+## 語言信號詞（講師轉換話題）：
+- 「接下來我們要講...」「現在進入...」「首先...第二...」
+- 「我們來看一下...」「這個部分完成後，我們來看...」
+- 「有了基礎概念，現在來實際操作...」
+- 「問與答時間」「總結一下」「我們來練習...」
+
+## 教學內容轉換：
+- 新概念/技術的首次詳細解釋
+- 理論講解 → 實際操作的轉換
+- 不同工具/軟體的切換時間點
+- 範例演示的開始與結束
+- 練習題/互動環節的開始
+
+## 視覺/操作轉換（參考OCR）：
+- 畫面切換到新投影片/軟體界面
+- 開始實際操作示範
+- 檔案開啟/工具切換的時間點
+
+# 錯誤示範 vs 正確做法：
+## ❌ 錯誤（絕對避免）：
+00:00:00 - 課程介紹
+00:15:00 - 基礎概念  
+00:30:00 - 進階應用
+00:45:00 - 實作練習
+
+## ✅ 正確（基於實際內容）：
+{first_ts} - 課程開場與學習目標說明
+[尋找逐字稿中第一個主題轉換的時間戳] - 第一個主要概念講解
+[尋找逐字稿中理論轉實作的時間戳] - 實際操作演示開始
+[尋找逐字稿中重要範例的時間戳] - 關鍵範例分析
 
 # 影片資訊
 - 總時長: {duration_hms}
+- 逐字稿時間範圍: {first_ts} 到 {last_ts}
 - 目標章節: {t_low}-{t_high} 個學習單元
 - 最小間隔: {min_gap_sec//60} 分鐘
 
-# 核心設計原則
-## 1. 學習價值優先
-- 每個章節代表完整的學習概念或技能單元
-- 聚焦學生學習成果而非講師操作步驟
-- 反映真實教育進程和知識建構
+# 分析步驟：
+1. **識別時間範圍**：確認逐字稿從 {first_ts} 開始，到 {last_ts} 結束
+2. **通讀內容**：理解整體教學流程和知識架構
+3. **標記轉折**：找出 {t_low}-{t_high} 個最重要的主題轉換點
+4. **時間對應**：每個章節時間必須對應逐字稿中實際討論的時間
+5. **標題精準**：用具體術語描述該時間點開始的教學內容
 
-## 2. 專業術語與適應性
-- 自動識別課程領域使用適當專業術語
-- 根據內容複雜度調整術語深度
-- 保持語言準確、行業認可、教育適當
+# 內容資料
+## 主要逐字稿（包含真實時間戳）：
+{transcript[:50000]}... [其餘內容已載入]
 
-## 3. 避免重複模式
-❌ 禁止「介紹/實作/測試/完成」機械模式
-❌ 禁止「功能一/功能二/功能三」流水帳
-✅ 使用「概念→原理→應用→優化」教育邏輯
-✅ 使用「基礎→進階→實戰→整合」學習路徑
-
-## 4. 教育連貫性
-- 確保章節間有邏輯遞進關係
-- 反映知識的自然建構過程
-- 每個章節應有明確的學習目標
+## 輔助視覺內容：
+{ocr_context if ocr_context else "（無螢幕內容參考）"}
 
 # 輸出格式
-嚴格遵守: `HH:MM:SS - 章節標題`
-- 標題: 繁體中文，使用專業教育術語
-- 時間: HH:MM:SS 格式
-- 純文字清單，無編號、無額外說明
+嚴格遵守：`HH:MM:SS - 具體章節標題`
+- 時間戳必須是逐字稿中實際存在或非常接近（±60秒內）的時間
+- 標題用繁體中文，具體描述該時間點開始的教學內容
+- 只輸出章節列表，無編號、無額外說明文字
 
-# 內容分析
-## 主要逐字稿:
-{transcript}
-
-## 輔助參考:
-{ocr_context if ocr_context else "（無螢幕內容參考）"}
+# 最終檢查
+生成每個章節前，問自己：
+1. 這個時間點在逐字稿中是否有對應的內容轉換？
+2. 章節時間是否在 {first_ts} 到 {last_ts} 範圍內？
+3. 標題是否準確反映從這個時間點開始的教學內容？
 """
     return prompt
 
 # ─────────────────────────
-# MAIN FUNCTIONS
+# Hierarchical Multi-Pass Generation (NEW)
 # ─────────────────────────
+
+def should_use_hierarchical(duration: float, transcript_length: int) -> bool:
+    """Determine if hierarchical multi-pass should be used"""
+    # Use hierarchical for longer, content-rich educational videos
+    return (duration >= 1800 and  # 30+ minutes
+            transcript_length >= 5000 and  # Substantial content
+            duration <= 14400)  # Under 4 hours (very long videos might need different handling)
+
+def hierarchical_multipass_generation(
+    raw_asr_text: str,
+    duration: float,
+    ocr_context: str,
+    client: Any,
+    config: ChapterConfig,
+    progress_callback: Optional[Callable[[str, int], None]] = None
+) -> Tuple[str, Dict[str, str], Dict[str, Any]]:
+    """
+    Three-pass hierarchical generation for high-quality educational chapters
+    Returns: (raw_llm_text, chapters, metadata)
+    """
+    
+    # PASS 1: Course Structure Analysis (10% of budget)
+    if progress_callback:
+        progress_callback("analyzing_course_structure", 40)
+    
+    structure_prompt = f"""
+作為資深教學設計專家，分析這個{sec_to_hms(int(duration))}教學影片的整體架構：
+
+【核心學習目標】
+1. 學生完成本課程後應掌握哪些關鍵能力？
+2. 有哪些必須理解的核心理論或概念？
+3. 有哪些需要熟練的實用技能？
+
+【知識架構分析】
+- 基礎鋪陳：哪些是前提知識或基礎概念？
+- 核心教學：最重要的理論/方法/技術是什麼？
+- 應用延伸：如何將所學應用於實際場景？
+- 總結整合：如何將零散知識系統化？
+
+【教學方法識別】
+- 理論講解 vs. 實例演示 vs. 操作練習 的比例分佈
+- 是否有問答互動、思考題、重點回顧？
+
+影片內容摘要（前40,000字符）：
+{truncate_text_by_tokens(raw_asr_text, 10000)}
+
+輔助視覺內容：
+{truncate_text_by_tokens(ocr_context, 2000) if ocr_context else "無"}
+"""
+    
+    structure_response = call_llm(
+        service_type=config.service_type,
+        client=client,
+        system_message="你是課程架構分析專家，擅長識別教學影片的整體學習目標和知識體系",
+        user_message=structure_prompt,
+        model=config.openai_model if config.service_type == "openai" else config.azure_model,
+        max_tokens=1200,
+        temperature=0.3
+    )
+    
+    structure_text = (structure_response.choices[0].message.content 
+                     if config.service_type == "openai" 
+                     else structure_response.choices[0].message.content)
+    
+    # PASS 2: Learning Modules Identification (30% of budget)
+    if progress_callback:
+        progress_callback("identifying_learning_modules", 60)
+    
+    modules_prompt = f"""
+基於課程結構分析：
+{structure_text}
+
+現在識別具體的學習模塊（4-8個），每個模塊應滿足：
+1. 有明確的學習目標
+2. 包含完整的教學閉環（講解→範例→練習）
+3. 時長合理（10-45分鐘）
+4. 有清晰的開始和結束標記
+
+特別注意以下教學轉折信號：
+- 主題轉換："接下來我們進入"、"現在開始講"、"第二部分"
+- 深度變化："有了基礎我們來看"、"更深入的問題是"
+- 應用轉向："理論講完了我們來實際操作"、"來看一個例子"
+
+完整逐字稿（精簡至80,000字符）：
+{truncate_text_by_tokens(raw_asr_text, 30000)}
+
+請輸出格式：
+模塊名稱 ~ 預估時間範圍 ~ 核心學習點 ~ 教學方法
+範例：演算法基礎 ~ 00:00-00:25 ~ 時間複雜度分析 ~ 理論講解+範例演示
+"""
+    
+    modules_response = call_llm(
+        service_type=config.service_type,
+        client=client,
+        system_message="你是課程模塊設計師，擅長將教學內容分解為邏輯連貫的學習單元",
+        user_message=modules_prompt,
+        model=config.openai_model if config.service_type == "openai" else config.azure_model,
+        max_tokens=1500,
+        temperature=0.2
+    )
+    
+    modules_text = (modules_response.choices[0].message.content 
+                   if config.service_type == "openai" 
+                   else modules_response.choices[0].message.content)
+    
+    # PASS 3: Detailed Chapter Generation (60% of budget)
+    if progress_callback:
+        progress_callback("generating_detailed_chapters", 80)
+    
+    chapters_prompt = f"""
+【課程整體結構】
+{structure_text}
+
+【學習模塊規劃】  
+{modules_text}
+
+現在為每個模塊生成具體的章節時間點（總共15-30個章節），要求：
+
+【章節設計原則】
+1. 每個章節代表一個完整的學習子目標
+2. 標記關鍵概念的首次詳細解釋
+3. 標記重要範例或案例分析的開始
+4. 標記練習題或互動環節
+5. 標記重點回顧或總結處
+
+【時間點選擇優先級】
+高優先級：理論首次講解、核心公式推導、重要範例開始
+中優先級：次要概念、補充說明、小練習
+低優先級：重複強調、過渡語句、技術操作細節
+
+【標題規範】
+- 使用專業術語，反映具體學習內容
+- 包含所屬模塊標籤（如：[基礎模塊]）
+- 明確指出是講解、範例、練習還是總結
+
+完整內容：
+{raw_asr_text}
+
+總時長：{sec_to_hms(int(duration))}
+
+輸出格式：HH:MM:SS - [模塊標籤] 具體章節標題
+範例：00:15:30 - [演算法基礎] 時間複雜度Big O表示法講解
+"""
+    
+    final_response = call_llm(
+        service_type=config.service_type,
+        client=client,
+        system_message="你是細心的章節設計師，擅長為學習模塊創建精確的時間標記",
+        user_message=chapters_prompt,
+        model=config.openai_model if config.service_type == "openai" else config.azure_model,
+        max_tokens=2500,
+        temperature=0.1
+    )
+    
+    final_text = (final_response.choices[0].message.content 
+                 if config.service_type == "openai" 
+                 else final_response.choices[0].message.content)
+    
+    # Parse chapters
+    chapters = parse_chapters_from_output(final_text)
+    
+    # Extract educational metadata
+    metadata = {
+        'generation_method': 'hierarchical_multi_pass',
+        'structure_analysis': structure_text,
+        'modules_analysis': modules_text,
+        'educational_quality_score': estimate_educational_quality(chapters, structure_text)
+    }
+    
+    return final_text, chapters, metadata
+
+def estimate_educational_quality(chapters: Dict[str, str], structure: str) -> float:
+    """Simple heuristic to estimate educational quality of chapters"""
+    quality_indicators = [
+        '講解', '原理', '範例', '練習', '實作', '應用', '總結', '重點',
+        '概念', '方法', '技巧', '步驟', '案例', '分析'
+    ]
+    
+    title_text = ' '.join(chapters.values())
+    indicator_count = sum(1 for indicator in quality_indicators 
+                         if indicator in title_text)
+    
+    total_titles = len(chapters)
+    return min(1.0, indicator_count / max(1, total_titles * 0.7))
+
+# ─────────────────────────
+# Enhanced Main Function with Smart Routing
+# ─────────────────────────
+
 def generate_chapters_debug(
     raw_asr_text: str,
     ocr_segments: List[Dict],
@@ -511,13 +748,12 @@ def generate_chapters_debug(
     run_dir: Optional[Path] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
     *,
-    ocr_context_override: Optional[str] = None,  # pass raw OCR here to inject verbatim
+    ocr_context_override: Optional[str] = None,
+    # NEW: Add control parameter
+    force_generation_method: Optional[str] = None,  # 'hierarchical' or 'single_pass'
 ) -> Tuple[str, Dict[str, str], Dict[str, str]]:
     """
-    Returns a tuple: (raw_llm_text, parsed_raw_chapters, balanced_final_chapters)
-    - raw_llm_text: exact text returned by the LLM BEFORE any parsing/cleaning/balancing.
-    - parsed_raw_chapters: chapters parsed from raw_llm_text (no balancing yet), lightly cleaned & Traditionalized.
-    - balanced_final_chapters: after policy-based dedup/down-selection.
+    Enhanced version with smart routing between hierarchical and single-pass generation
     """
     if progress_callback:
         progress_callback("initializing", 0)
@@ -540,9 +776,7 @@ def generate_chapters_debug(
         if progress_callback:
             progress_callback("processing_inputs", 10)
 
-        # Build OCR context:
-        # - If override is provided, use it verbatim.
-        # - Else, if ocr_segments is provided and you choose 'segments' mode upstream, format minimally.
+        # Build OCR context (existing logic)
         if ocr_context_override is not None:
             ocr_context = ocr_context_override
         else:
@@ -550,7 +784,7 @@ def generate_chapters_debug(
 
         min_gap_sec, target_range, max_caps = chapter_policy(int(duration))
         
-        # Save raw inputs (for debugging/auditing)
+        # Save raw inputs
         with open(run_dir / "raw_asr_text.txt", "w", encoding="utf-8") as f:
             f.write(raw_asr_text)
         if ocr_context_override is not None:
@@ -563,7 +797,7 @@ def generate_chapters_debug(
         if progress_callback:
             progress_callback("initializing_client", 20)
 
-        # Initialize client
+        # Initialize client (existing logic)
         service_type = config.service_type
         model = config.openai_model if service_type == "openai" else config.azure_model
 
@@ -581,62 +815,97 @@ def generate_chapters_debug(
                 base_url=config.openai_base_url,
             )
 
-        if progress_callback:
-            progress_callback("building_prompt", 30)
+        # 🎯 NEW: Smart Generation Method Selection
+        use_hierarchical = False
+        if force_generation_method == 'hierarchical':
+            use_hierarchical = True
+        elif force_generation_method == 'single_pass':
+            use_hierarchical = False
+        else:
+            # Auto-detect based on content characteristics
+            use_hierarchical = should_use_hierarchical(duration, len(raw_asr_text))
+        
+        logger.info(f"Using generation method: {'hierarchical_multi_pass' if use_hierarchical else 'single_pass'}")
 
-        # Prompt with budgeting (~128k total)
-        prompt_template = build_prompt_body("", int(duration), ocr_context)
-        template_tokens = count_tokens_llama(prompt_template)
-        CONTEXT_BUDGET = 128_000
-        max_transcript_tokens = max(0, CONTEXT_BUDGET - template_tokens)
-        transcript_for_prompt = truncate_text_by_tokens(raw_asr_text, max_transcript_tokens)
-        full_prompt = build_prompt_body(transcript_for_prompt, int(duration), ocr_context)
+        if use_hierarchical:
+            if progress_callback:
+                progress_callback("hierarchical_analysis", 30)
+            
+            # Use hierarchical multi-pass generation
+            raw_llm_text, chapters, metadata = hierarchical_multipass_generation(
+                raw_asr_text=raw_asr_text,
+                duration=duration,
+                ocr_context=ocr_context,
+                client=client,
+                config=config,
+                progress_callback=progress_callback
+            )
+            
+            # Save hierarchical metadata
+            with open(run_dir / "hierarchical_metadata.json", "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            with open(run_dir / "course_structure.txt", "w", encoding="utf-8") as f:
+                f.write(metadata.get('structure_analysis', ''))
+            with open(run_dir / "learning_modules.txt", "w", encoding="utf-8") as f:
+                f.write(metadata.get('modules_analysis', ''))
+                
+        else:
+            if progress_callback:
+                progress_callback("single_pass_processing", 30)
+            
+            # Use original single-pass generation
+            prompt_template = build_prompt_body("", int(duration), ocr_context)
+            template_tokens = count_tokens_llama(prompt_template)
+            CONTEXT_BUDGET = 128_000
+            max_transcript_tokens = max(0, CONTEXT_BUDGET - template_tokens)
+            transcript_for_prompt = truncate_text_by_tokens(raw_asr_text, max_transcript_tokens)
+            full_prompt = build_prompt_body(transcript_for_prompt, int(duration), ocr_context)
 
-        with open(run_dir / "full_prompt.txt", "w", encoding="utf-8") as f:
-            f.write(full_prompt)
+            with open(run_dir / "full_prompt.txt", "w", encoding="utf-8") as f:
+                f.write(full_prompt)
 
-        if progress_callback:
-            progress_callback("calling_llm", 50)
+            if progress_callback:
+                progress_callback("calling_llm", 50)
 
-        # Call LLM — ASR-first priority
-        enhanced_system_message = (
-            "你是專業的線上課程設計專家，擅長為各種學科創建高品質教育章節結構。"
-            "自動識別課程領域並使用適當專業術語，專注於學習價值和教育連貫性。"
-            "嚴格避免重複模式，創建反映真實教育進程的專業章節標題。"
-            "僅輸出章節清單，每行格式: `HH:MM:SS - 標題`（繁體中文）。"
-        )
+            enhanced_system_message = (
+                "你是專業的線上課程設計專家，擅長為各種學科創建高品質教育章節結構。"
+                "自動識別課程領域並使用適當專業術語，專注於學習價值和教育連貫性。"
+                "嚴格避免重複模式，創建反映真實教育進程的專業章節標題。"
+                "僅輸出章節清單，每行格式: `HH:MM:SS - 標題`（繁體中文）。"
+            )
 
-        logger.info(f"Calling {service_type} API for chapter generation...")
-        t0 = time.time()
-        resp = call_llm(
-            service_type=service_type,
-            client=client,
-            system_message=enhanced_system_message,
-            user_message=full_prompt,
-            model=model,
-            max_tokens=2048,
-            temperature=0.2,
-            top_p=0.9,
-        )
-        dt = time.time() - t0
-        logger.info(f"LLM API call completed in {dt:.2f}s")
+            logger.info(f"Calling {service_type} API for single-pass chapter generation...")
+            t0 = time.time()
+            resp = call_llm(
+                service_type=service_type,
+                client=client,
+                system_message=enhanced_system_message,
+                user_message=full_prompt,
+                model=model,
+                max_tokens=2048,
+                temperature=0.2,
+                top_p=0.9,
+            )
+            dt = time.time() - t0
+            logger.info(f"LLM API call completed in {dt:.2f}s")
 
+            if service_type == "azure":
+                raw_llm_text = resp.choices[0].message.content
+            else:
+                raw_llm_text = resp.choices[0].message.content
+
+            chapters = parse_chapters_from_output(raw_llm_text)
+            metadata = {'generation_method': 'single_pass'}
+
+        # COMMON POST-PROCESSING (existing logic)
         if progress_callback:
             progress_callback("parsing_response", 70)
-
-        # RAW text from LLM (BEFORE any parsing/cleaning/balancing)
-        if service_type == "azure":
-            raw_llm_text = resp.choices[0].message.content
-        else:
-            raw_llm_text = resp.choices[0].message.content
 
         with open(run_dir / "llm_output_raw.txt", "w", encoding="utf-8") as f:
             f.write(raw_llm_text)
 
-        # Parse → "raw chapters" (no balancing yet)
-        parsed_raw = parse_chapters_from_output(raw_llm_text)  # timestamps -> title
-        # Light title clean & Traditionalize for readability (still pre-balance)
-        parsed_raw_clean_trad = ensure_traditional_chapters(clean_chapter_titles(parsed_raw))
+        # Apply cleaning and Traditional Chinese conversion
+        parsed_raw_clean_trad = ensure_traditional_chapters(clean_chapter_titles(chapters))
 
         with open(run_dir / "parsed_raw_chapters.json", "w", encoding="utf-8") as f:
             json.dump(parsed_raw_clean_trad, f, ensure_ascii=False, indent=2)
@@ -654,6 +923,10 @@ def generate_chapters_debug(
         with open(run_dir / "chapters_final.json", "w", encoding="utf-8") as f:
             json.dump(chapters_final, f, ensure_ascii=False, indent=2)
 
+        # Save generation method info
+        with open(run_dir / "generation_method.txt", "w", encoding="utf-8") as f:
+            f.write(metadata.get('generation_method', 'unknown'))
+
         if progress_callback:
             progress_callback("completed", 100)
 
@@ -661,9 +934,12 @@ def generate_chapters_debug(
 
     except Exception as e:
         logger.error(f"Chapter generation failed: {e}", exc_info=True)
-        # Fallback
         fallback = ensure_traditional_chapters(create_time_based_fallback(int(duration)))
         return ("", {}, fallback)
+        
+# ─────────────────────────
+# MAIN FUNCTIONS
+# ─────────────────────────
 
 def create_time_based_fallback(duration_sec: int) -> Dict[str, str]:
     """Create fallback chapters based on time intervals"""
@@ -683,6 +959,8 @@ def generate_chapters(
     progress_callback: Optional[Callable[[str, int], None]] = None,
     *,
     ocr_context_override: Optional[str] = None,
+    # NEW: Add the same parameter here for consistency
+    force_generation_method: Optional[str] = None,  # 'hierarchical' or 'single_pass'
 ) -> Dict[str, str]:
     """
     Backward-compatible wrapper returning only the FINAL balanced chapters.
@@ -696,6 +974,7 @@ def generate_chapters(
         run_dir=run_dir,
         progress_callback=progress_callback,
         ocr_context_override=ocr_context_override,
+        force_generation_method=force_generation_method  # Pass through the new parameter
     )
     return final_chapters
 
