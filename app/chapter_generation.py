@@ -217,6 +217,31 @@ def parse_chapters_from_output(output_text: str) -> Dict[str, str]:
     
     return chapters
 
+def parse_summary_from_output(output_text: str) -> Dict[str, str]:
+    """Extract the structured summary from the LLM output"""
+    summary = {}
+    lines = output_text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if line.startswith('課程主題：'):
+            summary['topic'] = line.replace('課程主題：', '').strip()
+        elif line.startswith('核心內容：'):
+            summary['core_content'] = line.replace('核心內容：', '').strip()
+        elif line.startswith('學習目標：'):
+            summary['learning_objectives'] = line.replace('學習目標：', '').strip()
+        elif line.startswith('適合對象：'):
+            summary['target_audience'] = line.replace('適合對象：', '').strip()
+        elif line.startswith('難度級別：'):
+            summary['difficulty'] = line.replace('難度級別：', '').strip()
+    
+    # Apply Traditional Chinese conversion to summary fields
+    if _opencc:
+        for key in summary:
+            summary[key] = to_traditional(summary[key])
+    
+    return summary
+
 def globally_balance_chapters(
     chapters: Dict[str, str],
     duration_sec: int,
@@ -535,16 +560,30 @@ def build_prompt_body(
 {ocr_context if ocr_context else "（無螢幕內容參考）"}
 
 # 輸出格式
+## 第一部分：章節列表
 嚴格遵守：`HH:MM:SS - 具體章節標題`
 - 時間戳必須是逐字稿中實際存在或非常接近（±60秒內）的時間
 - 標題用繁體中文，具體描述該時間點開始的教學內容
-- 只輸出章節列表，無編號、無額外說明文字
+
+## 第二部分：課程摘要（章節列表完成後，空一行輸出）
+請提供結構化的課程摘要，格式如下：
+
+課程主題：[主要教學領域，如：Python程式設計、Premiere Pro剪輯]
+核心內容：[2-3個最重要的技術或概念]
+學習目標：[學生完成後應具備的能力]
+適合對象：[目標學員背景]
+難度級別：[初級/中級/高級]
 
 # 最終檢查
 生成每個章節前，問自己：
 1. 這個時間點在逐字稿中是否有對應的內容轉換？
 2. 章節時間是否在 {first_ts} 到 {last_ts} 範圍內？
 3. 標題是否準確反映從這個時間點開始的教學內容？
+
+完成章節後，檢查摘要：
+1. 課程主題是否準確反映核心教學內容？
+2. 核心內容是否包含最重要的2-3個技術點？
+3. 學習目標是否具體可衡量？
 """
     return prompt
 
@@ -711,13 +750,16 @@ def hierarchical_multipass_generation(
     
     # Parse chapters
     chapters = parse_chapters_from_output(final_text)
+    # Parse structured summary
+    course_summary = parse_summary_from_output(final_text)
     
     # Extract educational metadata
     metadata = {
         'generation_method': 'hierarchical_multi_pass',
         'structure_analysis': structure_text,
         'modules_analysis': modules_text,
-        'educational_quality_score': estimate_educational_quality(chapters, structure_text)
+        'educational_quality_score': estimate_educational_quality(chapters, structure_text),
+        'course_summary': course_summary 
     }
     
     return final_text, chapters, metadata
@@ -894,8 +936,12 @@ def generate_chapters_debug(
             else:
                 raw_llm_text = resp.choices[0].message.content
 
+            # Parse chapters
             chapters = parse_chapters_from_output(raw_llm_text)
-            metadata = {'generation_method': 'single_pass'}
+            # Parse structured summary
+            course_summary = parse_summary_from_output(raw_llm_text)
+            metadata = {'generation_method': 'single_pass',
+                        'course_summary': course_summary}
 
         # COMMON POST-PROCESSING (existing logic)
         if progress_callback:
