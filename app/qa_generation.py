@@ -173,6 +173,16 @@ def truncate_text_by_tokens(text: str, max_tokens: int = 120_000) -> str:
         current += t
     return "".join(truncated)
 
+def format_chapters_for_prompt(chapters: Dict[str, str]) -> List[Dict]:
+    """Convert chapter dict to list format for prompts"""
+    formatted = []
+    for ts, title in chapters.items():
+        formatted.append({
+            "ts": ts,
+            "title": title
+        })
+    return formatted
+
 def build_ocr_context_from_segments(ocr_segments: List[Dict]) -> str:
     """Convert OCR segments into a descriptive context string (sentence-level bullets)."""
     if not ocr_segments:
@@ -1503,6 +1513,10 @@ def generate_educational_content(
     run_dir: Optional[Path] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
     *,
+    # NEW PARAMETERS
+    chapters: Optional[Dict[str, str]] = None,  # {"00:10:17": "[課程導入] 課程開始"}
+    course_summary: Optional[Dict[str, str]] = None,  # From video_chaptering
+    # Existing parameters
     shuffle_options: bool = False,
     regenerate_explanations: bool = False,
     enforce_difficulty: bool = True,
@@ -1564,72 +1578,94 @@ def generate_educational_content(
         ctx_budget = MODEL_BUDGETS.get(model, 100_000)
 
         # ========================================================================
-        # NEW SECTION: Topic Extraction and Summary Generation
+        # Topic Extraction - SKIP if we have course_summary from chapters
         # ========================================================================
-        report("generating_topics_summary", progress_callback)
-        logger.info("📊 Extracting topics and generating global summary")
-        
-        # Calculate budget for topic extraction
-        topics_prompt_template_tokens = count_tokens_llama(
-            build_topics_summary_prompt(transcript="", context=None)
-        )
-        topics_budget = max(2_000, ctx_budget - topics_prompt_template_tokens)
-        topics_transcript = truncate_text_by_tokens(transcript, topics_budget)
-        
-        # Build context (optional)
-        topics_context = {
-            "視頻ID": video_id,
-            "內容類型": "教學視頻"
-        }
-        
-        # Generate topics prompt
-        topics_prompt = build_topics_summary_prompt(
-            transcript=topics_transcript,
-            context=topics_context
-        )
-        
-        logger.info(f"Topics extraction prompt approx tokens: {count_tokens_llama(topics_prompt):,}")
-        
-        # Call LLM for topics extraction
-        topics_response = call_llm(
-            service_type=service_type,
-            client=client,
-            system_message=TOPICS_SUMMARY_SYSTEM_MESSAGE,
-            user_message=topics_prompt,
-            model=model,
-            max_tokens=2048,  # Topics don't need as many tokens as MCQs
-            temperature=0.15,   # Slightly higher for creativity in summary
-            top_p=0.9
-        )
-        
-        # Parse the response
-        topics_output = extract_text_from_response(topics_response, service_type)
-        topics_list, global_summary, key_takeaways = parse_topics_summary_response(topics_output)
-        
-        # Log extraction results
-        logger.info(f"✅ Extracted {len(topics_list)} topics with global summary")
-        if key_takeaways:
-            logger.info(f"✅ Identified {len(key_takeaways)} key takeaways")
-        
-        # Save topics to file for debugging
-        with open(run_dir / "extracted_topics.json", "w", encoding="utf-8") as f:
-            json.dump({
-                "topics": topics_list,
-                "global_summary": global_summary,
-                "key_takeaways": key_takeaways
-            }, f, ensure_ascii=False, indent=2)
-        
+        if course_summary:
+            # Use provided data from chapter generation
+            logger.info("📊 Using course summary from chapter generation, skipping extraction")
+            # Convert course_summary to expected format
+            topics_list = []
+            if course_summary.get('core_content'):
+                # Parse core content into topics
+                core_items = course_summary['core_content'].split('、')
+                for i, item in enumerate(core_items[:5], 1):
+                    topics_list.append({
+                        "id": str(i).zfill(2),
+                        "title": item.strip(),
+                        "summary": f"課程重點：{item}",
+                        "keywords": []
+                    })
+                    
+            global_summary = f"{course_summary.get('topic', '')}課程，{course_summary.get('core_content', '')}。{course_summary.get('learning_objectives', '')}"
+            key_takeaways = [course_summary.get('learning_objectives', '')]
+    
+           # Skip the progress report since we're not actually calling LLM             
+        else:
+            # Original topic extraction code
+            report("generating_topics_summary", progress_callback)
+            logger.info("📊 Extracting topics and generating global summary")
+            
+            # Calculate budget for topic extraction
+            topics_prompt_template_tokens = count_tokens_llama(
+                build_topics_summary_prompt(transcript="", context=None)
+            )
+            topics_budget = max(2_000, ctx_budget - topics_prompt_template_tokens)
+            topics_transcript = truncate_text_by_tokens(transcript, topics_budget)
+    
+            # Build context (optional)
+            topics_context = {
+                "視頻ID": video_id,
+                "內容類型": "教學視頻"
+            }
+         
+            # Generate topics prompt
+            topics_prompt = build_topics_summary_prompt(
+                transcript=topics_transcript,
+                context=topics_context
+            )
+            logger.info(f"Topics extraction prompt approx tokens: {count_tokens_llama(topics_prompt):,}")
+            
+            # Call LLM for topics extraction
+            topics_response = call_llm(
+                service_type=service_type,
+                client=client,
+                system_message=TOPICS_SUMMARY_SYSTEM_MESSAGE,
+                user_message=topics_prompt,
+                model=model,
+                max_tokens=2048,
+                temperature=0.15,
+                top_p=0.9
+            )
+            # Parse the response
+            topics_output = extract_text_from_response(topics_response, service_type)
+            topics_list, global_summary, key_takeaways = parse_topics_summary_response(topics_output)
+
+            # Log extraction results
+            logger.info(f"✅ Extracted {len(topics_list)} topics with global summary")
+            if key_takeaways:
+                logger.info(f"✅ Identified {len(key_takeaways)} key takeaways")
+                
+            # Save topics to file for debugging
+            with open(run_dir / "extracted_topics.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "topics": topics_list,
+                    "global_summary": global_summary,
+                    "key_takeaways": key_takeaways
+                }, f, ensure_ascii=False, indent=2)
+
         # ========================================================================
         # UPDATED: MCQ Generation with Topics and Summary
         # ========================================================================
         report("generating_mcqs", progress_callback)
+        # Format chapters if provided
+        formatted_chapters = format_chapters_for_prompt(chapters) if chapters else None
 
         mcq_prompt_template_tokens = count_tokens_llama(build_mcq_prompt_v2(
             transcript="",
             ocr_context=ocr_context,
             num_questions=config.max_questions,
-            chapters=None,
-            global_summary=global_summary,  # ← NOW USING EXTRACTED SUMMARY
+            chapters=formatted_chapters,
+            global_summary=global_summary, 
         ))
         mcq_budget = max(2_000, ctx_budget - mcq_prompt_template_tokens)
         mcq_transcript = truncate_text_by_tokens(transcript, mcq_budget)
@@ -1638,12 +1674,12 @@ def generate_educational_content(
             transcript=mcq_transcript,
             ocr_context=ocr_context,
             num_questions=config.max_questions,
-            chapters=None,
-            global_summary=global_summary,  # ← NOW USING EXTRACTED SUMMARY
+            chapters=formatted_chapters,
+            global_summary=global_summary, 
         )
 
         logger.info(f"MCQ prompt approx tokens: {count_tokens_llama(final_mcq_prompt):,}")
-        logger.info(f"📚 Generating {config.max_questions} MCQs with ASR-first policy and topic context")
+        logger.info(f"📚 Generating {config.max_questions} MCQs with ASR-first policy, chapters, and topic context")
 
         mcq_response = call_llm(
             service_type=service_type,
@@ -1692,7 +1728,7 @@ def generate_educational_content(
             transcript=notes_transcript,
             ocr_context=ocr_context,
             num_pages=config.max_notes_pages,
-            chapters=None,
+            chapters=formatted_chapters,
             topics=topics_list,
             global_summary=global_summary,
         )
