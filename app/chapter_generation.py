@@ -163,15 +163,16 @@ def truncate_text_by_tokens(text: str, max_tokens: int = 120_000) -> str:
 # ─────────────────────────
 def chapter_policy(duration_sec: int) -> Tuple[int, Tuple[int, int], int]:
     """Determine chapter generation parameters based on video duration"""
-    if duration_sec < 30 * 60:
-        return 90,  (6, 12), 30
-    if duration_sec < 60 * 60:
-        return 180, (8, 16), 40
-    if duration_sec < 120 * 60:
-        return 300, (10, 20), 50
-    if duration_sec < 180 * 60:
-        return 540, (12, 24), 60
-    return 600, (14, 28), 80
+    if duration_sec < 30 * 60:     # < 30 min
+        return 120, (5, 10), 30    # min_gap: 2 min, target: 5-10 chapters
+    elif duration_sec < 60 * 60:   # < 1 hour  
+        return 180, (6, 12), 40    # min_gap: 3 min, target: 6-12 chapters
+    elif duration_sec < 120 * 60:  # < 2 hours
+        return 240, (8, 16), 50    # min_gap: 4 min, target: 8-16 chapters
+    elif duration_sec < 180 * 60:  # < 3 hours
+        return 300, (10, 20), 60   # min_gap: 5 min, target: 10-20 chapters
+    else:                           # 3+ hours
+        return 360, (12, 24), 80   # min_gap: 6 min, target: 12-24 chapters
 
 def _normalize_ts(ts: str) -> str:
     """Normalize timestamp format to HH:MM:SS"""
@@ -249,7 +250,13 @@ def globally_balance_chapters(
     target_range: Tuple[int, int],
     max_caps: int,
 ) -> Dict[str, str]:
-    """Balance chapters across the video duration with center-biased selection"""
+    """Balance chapters with content-aware merging"""
+    
+    def extract_module_tag(title: str) -> str:
+        """Extract [module] tag if present"""
+        match = re.match(r'\[([^\]]+)\]', title)
+        return match.group(1) if match else ""
+    
     def ts_to_s(ts: str) -> int:
         p = ts.split(":")
         if len(p) == 2:
@@ -263,35 +270,63 @@ def globally_balance_chapters(
     if not cands:
         return {}
 
-    # Deduplicate by minimum gap; keep the longer title as a proxy for richness.
+    # Content-aware deduplication
     dedup = []
     for s, ts, title in cands:
-        if dedup and (s - dedup[-1][0]) < min_gap_sec:
-            if len(title) > len(dedup[-1][2]):
-                dedup[-1] = (s, ts, title)
+        if not dedup:
+            dedup.append((s, ts, title))
+            continue
+            
+        time_gap = s - dedup[-1][0]
+        
+        # Merge if same module and close, or very close regardless
+        should_merge = False
+        prev_module = extract_module_tag(dedup[-1][2])
+        curr_module = extract_module_tag(title)
+        
+        if time_gap < 180:  # Less than 3 minutes - always merge
+            should_merge = True
+        elif prev_module and curr_module and prev_module == curr_module:
+            # Same module tag - use min_gap_sec
+            should_merge = time_gap < min_gap_sec
+        elif time_gap < min_gap_sec // 2:  # Half the min_gap for different modules
+            should_merge = True
+            
+        if should_merge:
+            # Keep the better title (prefer tagged, then longer)
+            prev_s, prev_ts, prev_title = dedup[-1]
+            if curr_module and not prev_module:
+                dedup[-1] = (prev_s, prev_ts, title)
+            elif len(title) > len(prev_title) * 1.3:
+                dedup[-1] = (prev_s, prev_ts, title)
         else:
             dedup.append((s, ts, title))
 
     t_low, t_high = target_range
+    
+    # Log the balancing result
+    logger.info(f"Chapter balancing: {len(chapters)} → {len(dedup)} (target: {t_low}-{t_high})")
+    
     if t_low <= len(dedup) <= t_high:
         return {ts: title for _, ts, title in dedup}
 
-    # Too many chapters: choose the one nearest to each segment's center
+    # Too many chapters: choose representatives from each segment
     if len(dedup) > t_high:
         selected = []
         segment_length = max(1, duration_sec // t_high)
         for i in range(t_high):
             segment_start = i * segment_length
             segment_end = (i + 1) * segment_length if i < t_high - 1 else duration_sec + 1
-            segment_center = (segment_start + segment_end) // 2
             segment_chapters = [c for c in dedup if segment_start <= c[0] < segment_end]
             if segment_chapters:
+                # Pick the one closest to segment center
+                segment_center = (segment_start + segment_end) // 2
                 chosen = min(segment_chapters, key=lambda c: abs(c[0] - segment_center))
                 selected.append(chosen)
         selected.sort(key=lambda x: x[0])
         return {ts: title for _, ts, title in selected}
 
-    # Not enough chapters: just cap to max_caps to be safe.
+    # Not enough chapters: just cap to max_caps
     return {ts: title for _, ts, title in dedup[:max_caps]}
 
 # ─────────────────────────
@@ -695,7 +730,7 @@ def hierarchical_multipass_generation(
                    if config.service_type == "openai" 
                    else modules_response.choices[0].message.content)
     
-    # PASS 3: Detailed Chapter Generation (60% of budget)
+# PASS 3: Detailed Chapter Generation with Course Summary (60% of budget)
     if progress_callback:
         progress_callback("generating_detailed_chapters", 80)
     
@@ -706,7 +741,7 @@ def hierarchical_multipass_generation(
 【學習模塊規劃】  
 {modules_text}
 
-現在為每個模塊生成具體的章節時間點（總共15-30個章節），要求：
+現在為每個模塊生成具體的章節時間點（總共15-30個章節），並提供課程摘要。
 
 【章節設計原則】
 1. 每個章節代表一個完整的學習子目標
@@ -730,17 +765,30 @@ def hierarchical_multipass_generation(
 
 總時長：{sec_to_hms(int(duration))}
 
-輸出格式：HH:MM:SS - [模塊標籤] 具體章節標題
-範例：00:15:30 - [演算法基礎] 時間複雜度Big O表示法講解
+【輸出格式要求】
+請嚴格按照以下格式輸出：
+
+第一部分 - 章節列表：
+HH:MM:SS - [模塊標籤] 具體章節標題
+（每行一個章節）
+
+（空一行）
+
+第二部分 - 課程摘要：
+課程主題：[主要教學領域，如：Python程式設計、資料分析]
+核心內容：[列出6-12個主要教學概念，以頓號分隔]
+學習目標：[學生完成後將掌握的能力]
+適合對象：[目標學員背景]
+難度級別：[初級/中級/高級]
 """
     
     final_response = call_llm(
         service_type=config.service_type,
         client=client,
-        system_message="你是細心的章節設計師，擅長為學習模塊創建精確的時間標記",
+        system_message="你是細心的章節設計師，擅長為學習模塊創建精確的時間標記和課程摘要。請嚴格遵守輸出格式，確保包含章節列表和課程摘要兩部分。",
         user_message=chapters_prompt,
         model=config.openai_model if config.service_type == "openai" else config.azure_model,
-        max_tokens=2500,
+        max_tokens=3000,  # Increased from 2500 to accommodate summary
         temperature=0.1
     )
     
@@ -748,10 +796,17 @@ def hierarchical_multipass_generation(
                  if config.service_type == "openai" 
                  else final_response.choices[0].message.content)
     
-    # Parse chapters
+    # Parse chapters (existing code works)
     chapters = parse_chapters_from_output(final_text)
-    # Parse structured summary
+    
+    # Parse structured summary (existing code should now work)
     course_summary = parse_summary_from_output(final_text)
+    
+    # Log if summary was successfully extracted
+    if course_summary:
+        logger.info(f"Successfully extracted course summary with {len(course_summary)} fields")
+    else:
+        logger.warning("Course summary extraction failed, using empty dict")
     
     # Extract educational metadata
     metadata = {
@@ -759,7 +814,7 @@ def hierarchical_multipass_generation(
         'structure_analysis': structure_text,
         'modules_analysis': modules_text,
         'educational_quality_score': estimate_educational_quality(chapters, structure_text),
-        'course_summary': course_summary 
+        'course_summary': course_summary  # Now should be populated
     }
     
     return final_text, chapters, metadata
