@@ -1473,24 +1473,44 @@ def result_to_legacy_client_format(
     chapters: Optional[List[Dict]] = None
 ) -> dict:
     """
-    ADAPTER: Converts the new, rich EducationalContentResult into the
-    legacy client format. This is a temporary bridge until the client
-    can be updated to accept the new payload format.
+    Convert to client's expected API format with proper Options structure,
+    Tags, and CourseType fields.
     """
-    # 1. Convert MCQs to the simple legacy question format
-    legacy_questions = []
+    
+    # Difficulty mapping to Chinese
+    difficulty_map = {
+        "easy": "簡單",
+        "medium": "中等",
+        "hard": "困難"
+    }
+    
+    # Transform questions to client format
+    client_questions = []
     for i, mcq in enumerate(result.mcqs, start=1):
-        legacy_questions.append({
+        # Ensure we have tags (fallback if needed)
+        tags = mcq.tags if hasattr(mcq, 'tags') and mcq.tags else []
+        if not tags and mcq.topic:
+            # Fallback: extract from topic if no tags
+            tags = [mcq.topic]
+        
+        # Ensure we have course_type
+        course_type = mcq.course_type if hasattr(mcq, 'course_type') else '其他'
+        
+        client_questions.append({
             "QuestionId": f"Q{str(i).zfill(3)}",
             "QuestionText": mcq.question,
-            "Options": mcq.options,
+            "Options": [
+                {"Label": label, "Text": text}
+                for label, text in zip(["A", "B", "C", "D"], mcq.options)
+            ],
             "CorrectAnswer": mcq.correct_answer,
             "Explanation": mcq.explanation,
-            "Difficulty": mcq.difficulty,
-            "Topic": mcq.topic
+            "Tags": tags[:5],  # Limit to 5 tags
+            "Difficulty": difficulty_map.get(mcq.difficulty, mcq.difficulty),
+            "CourseType": course_type
         })
-
-    # 2. Convert Lecture Notes into a single Markdown string
+    
+    # Build lecture notes markdown
     markdown_lines = []
     for section in result.lecture_notes:
         markdown_lines.append(f"## {section.title}")
@@ -1504,24 +1524,19 @@ def result_to_legacy_client_format(
             for example in section.examples:
                 markdown_lines.append(f"- {example}")
         markdown_lines.append("")
-
+    
     markdown_lines.append("## 總結")
     markdown_lines.append(result.summary)
-    combined_markdown = "\n".join(markdown_lines)
-
-    # 3. Build the final payload in the legacy format
-    legacy_payload = {
+    
+    return {
         "Id": id,
         "TeamId": team_id,
         "SectionNo": section_no,
         "CreatedAt": created_at,
-        "Questions": legacy_questions,
-        "CourseNote": combined_markdown.strip(),
+        "Questions": client_questions,
+        "CourseNote": "\n".join(markdown_lines).strip(),
         "chapters": chapters or []
     }
-
-    logger.info(f"📦 Packaged {len(legacy_questions)} questions into legacy client JSON payload.")
-    return legacy_payload
 
 # ==================== ASR PREPROCESSING ====================
 def preprocess_asr_text(raw_asr_text: str, min_chunk_duration: int = 60, max_gap: int = 10) -> str:
