@@ -89,11 +89,13 @@ def get_content_hash(transcript: str, ocr_context: str, content_type: str) -> st
 @dataclass
 class MCQ:
     question: str
-    options: List[str]              # ["optA", "optB", "optC", "optD"]
-    correct_answer: str             # "A" | "B" | "C" | "D"
+    options: List[str]
+    correct_answer: str
     explanation: str
-    difficulty: str                 # "easy" | "medium" | "hard"
+    difficulty: str
     topic: str
+    tags: List[str] = field(default_factory=list)  # NEW
+    course_type: str = "general"  # NEW
 
 @dataclass
 class LectureNoteSection:
@@ -571,6 +573,7 @@ def validate_topics_output(data: Dict) -> tuple[bool, List[str]]:
     return len(errors) == 0, errors
                                     
 # ==================== PROMPT BUILDERS (V2, ASR-first) ====================
+
 def build_mcq_prompt_v2(
     transcript: str,
     *,
@@ -578,9 +581,10 @@ def build_mcq_prompt_v2(
     num_questions: int = 10,
     chapters: Optional[List[Dict]] = None,
     global_summary: str = "",
+    hierarchical_metadata: Optional[Dict] = None
 ) -> str:
     """ASR-first MCQ prompt with Bloom structuring, global context, and practical constraints.
-       Schema preserved: {"mcqs":[{question, options[A..D], correct_answer, explanation, difficulty, topic}]}.
+       Schema preserved: {"mcqs":[{question, options[A..D], correct_answer, explanation, difficulty, topic, tags, course_type}]}.
     """
     base = num_questions // 3
     rem  = num_questions % 3
@@ -595,9 +599,28 @@ def build_mcq_prompt_v2(
             title = c.get("title") or ""
             if ts or title:
                 chap_lines.append(f"- {ts}：{title}")
+                
     global_ctx = []
     if global_summary.strip():
         global_ctx.append(f"- 摘要：{global_summary.strip()}")
+
+    if hierarchical_metadata:
+        # Add structured educational context
+        course_summary = hierarchical_metadata.get('course_summary', {})
+        if course_summary:
+            global_ctx.extend([
+                f"- 核心主題：{course_summary.get('topic', '')}",
+                f"- 關鍵技術：{course_summary.get('core_content', '')}",
+                f"- 學習目標：{course_summary.get('learning_objectives', '')}",
+                f"- 目標學員：{course_summary.get('target_audience', '')}",
+                f"- 難度級別：{course_summary.get('difficulty', '')}"
+            ])
+        
+        # Add module analysis for question distribution guidance
+        modules_analysis = hierarchical_metadata.get('modules_analysis', '')
+        if modules_analysis:
+            global_ctx.append(f"- 教學模組分析：{modules_analysis}")
+            
     if chap_lines:
         global_ctx.append("- 章節：\n" + "\n".join(chap_lines))
     global_ctx_block = "\n".join(global_ctx) if global_ctx else "（無）"
@@ -605,8 +628,31 @@ def build_mcq_prompt_v2(
     ocr_block = ""
     if ocr_context.strip():
         ocr_block = f"## 螢幕文字（OCR，僅作輔助參考）\n{ocr_context}\n\n"
+        
+    # NEW: Enhanced question distribution logic based on metadata
+    if hierarchical_metadata and hierarchical_metadata.get('educational_quality_score', 0) > 0.7:
+        # High-quality content: shift toward application/analysis
+        if hierarchical_metadata['educational_quality_score'] > 0.8:
+            recall_n = max(2, recall_n - 1)
+            analysis_n = analysis_n + 1
+        # Adjust based on difficulty level
+        difficulty = hierarchical_metadata.get('course_summary', {}).get('difficulty', '')
+        if difficulty == '高級':
+            recall_n = max(1, recall_n - 2)
+            analysis_n = analysis_n + 2
+            
+    # ADD THE LOGGING RIGHT HERE (after distribution logic, before prompt construction)
+    if hierarchical_metadata and hierarchical_metadata.get('educational_quality_score', 0) > 0.7:
+        original_recall = base + (1 if rem >= 1 else 0)
+        original_analysis = base
+        if recall_n != original_recall or analysis_n != original_analysis:
+            logger.info(f"Adjusted question distribution based on metadata: "
+                       f"Recall {original_recall}→{recall_n}, "
+                       f"Application {application_n}→{application_n}, "
+                       f"Analysis {original_analysis}→{analysis_n}")
 
-    # --- KEY ENHANCEMENT: Revised Prompt --- 
+    
+    # --- KEY ENHANCEMENT: Revised Prompt (WITH ADDITIONS FOR TAGS AND COURSE_TYPE) --- 
     prompt = f"""
 你是一位資深的教學設計專家，負責為「{global_summary.splitlines()[0] if global_summary else "各種科目"}」課程設計高品質的多選題（MCQ）。請嚴格依照下列規則出題，並**僅**輸出 JSON。
 
@@ -633,6 +679,17 @@ def build_mcq_prompt_v2(
 - **難度比例**：30% easy / 40% medium / 30% hard。
 - **解釋說明**：每題的解釋必須包含「為何正確」以及「常見的錯誤選擇及其原因」。
 - **主題標籤**：`topic` 字段應標明該題測驗的具體知識點（e.g., `Python列表索引`, `色彩理論`, `Facebook廣告受眾設定`）。
+- **標籤生成**：為每題生成 3-5 個相關標籤（tags），涵蓋核心概念、技術、應用場景。標籤應具體且有助於分類和搜索。
+- **課程類型判斷**：根據題目內容自動判斷並標記課程類型（course_type）。
+
+### 課程類型分類指南
+- **設計**：涉及視覺設計、UI/UX、色彩理論、排版、創意軟體（Photoshop、Illustrator、Figma等）
+- **程式**：涉及編程語言、演算法、資料結構、軟體開發、API、框架、資料庫
+- **數學**：涉及數學運算、公式、定理、統計、微積分、幾何、代數
+- **語言**：涉及語言學習、文法、詞彙、寫作、翻譯、口語表達
+- **商業**：涉及管理、行銷、財務、經濟、策略、創業、商業模式
+- **科學**：涉及物理、化學、生物、地球科學、實驗方法、科學理論
+- **其他**：不屬於以上類別的課程內容
 
 ### 輸出格式（僅 JSON）
 ```json
@@ -644,11 +701,12 @@ def build_mcq_prompt_v2(
       "correct_answer": "A|B|C|D",
       "explanation": "為何正確＋常見誤解",
       "difficulty": "easy|medium|hard",
-      "topic": "主題/概念"
+      "topic": "主題/概念",
+      "tags": ["標籤1", "標籤2", "標籤3"],
+      "course_type": "設計|程式|數學|語言|商業|科學|其他"
     }}
   ]
 }}
-
 
 ### 輸入資料
 ## ASR 逐字稿（主要依據）
@@ -666,6 +724,8 @@ def build_lecture_notes_prompt_v2(
     chapters: Optional[List[Dict]] = None,
     topics: Optional[List[Dict]] = None,
     global_summary: str = "",
+    # NEW: Add hierarchical metadata
+    hierarchical_metadata: Optional[Dict] = None
 ) -> str:
     """ASR-first lecture notes prompt. Transforms transcripts into structured, hierarchical study guides.
        Schema: sections[{title, content, key_points[]}], summary, key_terms[]
@@ -684,16 +744,31 @@ def build_lecture_notes_prompt_v2(
     if chapters:
         for c in chapters[:18]:
             ts = c.get("ts") or c.get("timestamp") or ""
-            title = c.get("title") or ""
+            title = c.get("title", "")
             if ts or title:
                 chap_lines.append(f"- {ts}：{title}")
+                
     global_ctx = []
     if global_summary.strip():
         global_ctx.append(f"- 摘要：{global_summary.strip()}")
+    
+    # NEW: Add hierarchical metadata to global context
+    if hierarchical_metadata:
+        course_summary = hierarchical_metadata.get('course_summary', {})
+        if course_summary:
+            global_ctx.extend([
+                f"- 核心主題：{course_summary.get('topic', '')}",
+                f"- 關鍵技術：{course_summary.get('core_content', '')}",
+                f"- 學習目標：{course_summary.get('learning_objectives', '')}",
+                f"- 目標學員：{course_summary.get('target_audience', '')}",
+                f"- 難度級別：{course_summary.get('difficulty', '')}"
+            ])
+    
     if chap_lines:
         global_ctx.append("- 章節：\n" + "\n".join(chap_lines))
     if topics_snippet:
         global_ctx.append("- 主題大綱：\n" + topics_snippet)
+        
     global_ctx_block = "\n".join(global_ctx) if global_ctx else "（無）"
 
     ocr_block = ""
@@ -703,7 +778,7 @@ def build_lecture_notes_prompt_v2(
     min_words = num_pages * 400
     max_words = (num_pages + 1) * 350
 
-    # --- FINAL ENHANCED PROMPT ---
+    # --- ENHANCED PROMPT ---
     prompt = f"""
 你是一位資深的課程編輯和教學設計專家。你的核心任務是將原始的講座逐字稿**轉化、提煉、重構**為一份結構清晰、重點突出、最適合學生複習與深化理解的**終極講義與學習指南**。
 
@@ -746,7 +821,6 @@ def build_lecture_notes_prompt_v2(
     {{ "term": "關鍵術語2", "definition": "清晰的定義" }}
   ]
 }}
-
 ```
 字數建議: {min_words}–{max_words}（軟限制）。品質和清晰度優先於嚴格遵守字數。
 
@@ -907,26 +981,49 @@ def parse_mcq_response(response_text: str, force_traditional: bool = True) -> Li
     data = _safe_load_json(response_text)
     if not data:
         return []
+    
     mcqs: List[MCQ] = []
     for mcq_data in data.get('mcqs', []):
         d = _norm_mcq(mcq_data)
+        
+        # Extract basic fields
         q = d.get('question', '')
         opts = d.get('options', [])
         exp = d.get('explanation', '')
         topic = d.get('topic', '')
+        
+        # NEW: Extract tags
+        tags = d.get('tags', [])
+        if not isinstance(tags, list):
+            tags = [tags] if tags else []
+        tags = [str(tag).strip() for tag in tags if tag][:5]  # Limit to 5 tags
+        
+        # NEW: Extract course_type
+        course_type = str(d.get('course_type', '其他')).strip()
+        valid_types = ['設計', '程式', '數學', '語言', '商業', '科學', '其他']
+        if course_type not in valid_types:
+            course_type = '其他'
+        
+        # Apply Traditional Chinese conversion
         if force_traditional:
             q = to_traditional(q)
             opts = [to_traditional(o) for o in opts]
             exp = to_traditional(exp)
             topic = to_traditional(topic)
+            tags = [to_traditional(tag) for tag in tags]
+            # course_type is already in Traditional
+        
         mcqs.append(MCQ(
             question=q,
             options=opts,
             correct_answer=d.get('correct_answer', ''),
             explanation=exp,
             difficulty=d.get('difficulty', 'medium'),
-            topic=topic
+            topic=topic,
+            tags=tags,  # NEW
+            course_type=course_type  # NEW
         ))
+    
     return mcqs
 
 def parse_lecture_notes_response(response_text: str, force_traditional: bool = True) -> Tuple[List[LectureNoteSection], str]:
@@ -955,6 +1052,7 @@ def parse_lecture_notes_response(response_text: str, force_traditional: bool = T
     if force_traditional:
         summary = to_traditional(summary)
     return sections, summary
+    
 def parse_lecture_notes_with_validation(
     response_text: str,
     force_traditional: bool = True,
