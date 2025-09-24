@@ -284,11 +284,11 @@ def globally_balance_chapters(
         prev_module = extract_module_tag(dedup[-1][2])
         curr_module = extract_module_tag(title)
         
-        if time_gap < 180:  # Less than 3 minutes - always merge
+        if time_gap < 120:  # Less than 2 minutes - always merge
             should_merge = True
         elif prev_module and curr_module and prev_module == curr_module:
             # Same module tag - use min_gap_sec
-            should_merge = time_gap < min_gap_sec
+            should_merge = time_gap < min_gap_sec * 0.7
         elif time_gap < min_gap_sec // 2:  # Half the min_gap for different modules
             should_merge = True
             
@@ -697,19 +697,19 @@ def hierarchical_multipass_generation(
 基於課程結構分析：
 {structure_text}
 
-現在識別具體的學習模塊（4-8個），每個模塊應滿足：
+現在識別具體的學習模塊（7-12個），每個模塊應滿足：
 1. 有明確的學習目標
 2. 包含完整的教學閉環（講解→範例→練習）
-3. 時長合理（10-45分鐘）
-4. 有清晰的開始和結束標記
+3. 時長合理（10-30分鐘）
+4. 有清晰的開始和結束標記（避免過於細碎的主題切分）
 
 特別注意以下教學轉折信號：
 - 主題轉換："接下來我們進入"、"現在開始講"、"第二部分"
 - 深度變化："有了基礎我們來看"、"更深入的問題是"
 - 應用轉向："理論講完了我們來實際操作"、"來看一個例子"
 
-完整逐字稿（精簡至80,000字符）：
-{truncate_text_by_tokens(raw_asr_text, 30000)}
+完整逐字稿（精簡至160,000字符）：
+{truncate_text_by_tokens(raw_asr_text, 70000)}
 
 請輸出格式：
 模塊名稱 ~ 預估時間範圍 ~ 核心學習點 ~ 教學方法
