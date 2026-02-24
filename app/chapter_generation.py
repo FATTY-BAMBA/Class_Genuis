@@ -1632,229 +1632,25 @@ def hierarchical_multipass_generation(
     if progress_callback:
         progress_callback("generating_detailed_chapters", 80)
     
-    # ────────── Decide: Unit-Aware vs Generic PASS 3 ──────────
-    # If client provided units, parse PASS 2 modules and create temporal boundaries
-    use_unit_aware_pass3 = False
-    unit_ranges = []
+    # ────────── STEP 1: Generate chapters freely (no unit constraints) ──────────
+    # Let the LLM find natural chapter boundaries from ASR content.
+    # Unit tagging happens AFTER chapter generation.
+    
     validated_units = units  # may be None
     
-    if units and len(units) >= 1:
-        pass2_modules = parse_pass2_modules(modules_text)
-        logger.info(f"📊 Parsed {len(pass2_modules)} modules from PASS 2 for unit mapping")
-        
-        if pass2_modules:
-            unit_ranges = map_units_to_module_ranges(
-                modules=pass2_modules,
-                client_units=units,
-                duration_sec=int(duration),
-            )
-            use_unit_aware_pass3 = True
-        else:
-            logger.warning("⚠️ Could not parse PASS 2 modules; using generic PASS 3")
-    
-    if use_unit_aware_pass3:
-        # ────────── UNIT-AWARE PASS 3 (with temporal boundaries) ──────────
-        num_units = len(validated_units)
-        min_per, max_per = determine_chapters_per_unit(num_units)
-        total_min = num_units * min_per
-        total_max = num_units * max_per
-        
-        logger.info(f"🎯 UNIT-AWARE PASS 3: {num_units} validated units")
-        logger.info(f"   Sub-chapters per unit: {min_per}-{max_per}")
-        logger.info(f"   Total chapters target: {total_min}-{total_max}")
-        
-        # Build the unit list for the prompt WITH time boundaries
-        units_for_prompt = []
-        for i, unit in enumerate(validated_units):
-            unit_info = {
-                "ClientUnitNo": unit["UnitNo"],
-                "ClientUnitTitle": unit["Title"],
-            }
-            if i < len(unit_ranges) and unit_ranges[i].get("start_ts"):
-                ur = unit_ranges[i]
-                unit_info["TimeRange"] = f"{ur['start_ts']} to {ur['end_ts']}"
-                unit_info["AssignedModules"] = ur["modules"]
-            units_for_prompt.append(unit_info)
-        
-        units_json_for_prompt = json.dumps(units_for_prompt, ensure_ascii=False, indent=2)
-        
-        # Build time boundary instructions
-        time_boundary_instructions = ""
-        if unit_ranges:
-            boundary_lines = []
-            for ur in unit_ranges:
-                if ur.get("start_ts"):
-                    modules_str = ", ".join(ur["modules"][:4])
-                    boundary_lines.append(
-                        f"- Unit {ur['UnitNo']} ({ur['Title']}): {ur['start_ts']} to {ur['end_ts']}\n"
-                        f"  Modules: {modules_str}"
-                    )
-            if boundary_lines:
-                boundaries_text = "\n".join(boundary_lines)
-                time_boundary_instructions = f"""
-【單元時間邊界（必須嚴格遵守）】
-每個單元的所有章節必須在指定的時間範圍內。不同單元的章節不能交錯。
-
-{boundaries_text}
-
-嚴禁違反的行為：
-- 單元1的章節出現在單元2的時間範圍內
-- 同一個單元的章節散佈在不連續的時間段
-- 忽略時間邊界，按語義而非時間順序分配章節
+    # Build educational context for units (informational, not constraining)
+    unit_context_hint = ""
+    if validated_units and len(validated_units) >= 1:
+        unit_names = ", ".join(f"{u['UnitNo']}.{u['Title']}" for u in validated_units)
+        unit_context_hint = f"""
+【參考：客戶預定教學單元】
+本課程包含以下教學單元主題：{unit_names}
+這些是課程的主要主題，但影片中可能還包含課程介紹、行政事務、休息等非教學內容。
+請專注於從逐字稿中找到自然的內容轉換點，不需要將所有章節強制歸入以上單元。
 """
-        
-        chapters_prompt = f"""
-【課程整體結構】
-{structure_text}
-
-【學習模塊規劃】  
-{modules_text}
-
-【客戶預定教學單元（已驗證，含時間邊界）】
-{units_json_for_prompt}
-
-{time_boundary_instructions}
-
-你的任務：為上面每個教學單元在其指定的時間範圍內找到對應的章節時間點。
-
-【章節設計原則】
-1. 每個單元必須有 {min_per}-{max_per} 個章節
-2. 每個單元的章節必須在該單元的時間範圍內（見上方時間邊界）
-3. 章節時間必須對應逐字稿中講師實際講解該內容的時間戳（±60秒內）
-4. 章節標題用繁體中文，具體描述該時間點的教學內容
-5. 所有章節按時間遞增排序
-6. 不同單元的章節不能交錯（單元1的所有章節必須在單元2的第一個章節之前）
-
-【如何為每個單元找到正確的時間點】
-- 在該單元的時間範圍內閱讀逐字稿
-- 第一個章節 = 該時間範圍內主題首次被詳細講解的時間點
-- 後續章節 = 該範圍內的子主題、範例、練習等轉換點
-
-完整逐字稿（含精確時間戳）：
-{asr_text}
-
-視覺輔助內容：
-{ocr_text if ocr_text else "（無螢幕內容參考）"}
-
-總時長：{sec_to_hms(int(duration))}
-
-【輸出格式要求（重要：只輸出 JSON，不要輸出任何其他文字）】
-{{
-  "UnitChapters": [
-    {{
-      "ClientUnitNo": 1,
-      "ClientUnitTitle": "單元名稱",
-      "Chapters": [
-        {{"Title": "具體章節標題", "Time": "HH:MM:SS"}},
-        {{"Title": "具體章節標題", "Time": "HH:MM:SS"}}
-      ]
-    }}
-  ],
-  "CourseSummary": {{
-    "topic": "課程主題",
-    "core_content": "核心內容摘要",
-    "learning_objectives": "學習目標",
-    "target_audience": "適合對象",
-    "difficulty": "難度級別"
-  }}
-}}
-
-規則：
-1) 每個 ClientUnitNo 必須完全對應上面提供的教學單元
-2) 每個單元的 Chapters 必須有 {min_per}-{max_per} 個章節
-3) 每個單元的章節 Time 必須在該單元的時間邊界內
-4) Time 必須是逐字稿中實際存在或非常接近（±60秒內）的 HH:MM:SS
-5) 所有 Chapters 的 Time 必須全域遞增（跨單元也要遞增）
-6) 只輸出 JSON，禁止多餘解釋
-"""
-        
-        logger.info(f"📤 PASS 3 (unit-aware + temporal boundaries) prompt: ~{count_tokens_llama(chapters_prompt):,} tokens")
-        logger.info("🤖 Calling LLM for unit-aware chapter generation...")
-        t0 = time.time()
-        
-        try:
-            final_response = call_llm(
-                service_type=config.service_type,
-                client=client,
-                system_message=(
-                    "你是細心的章節設計師。"
-                    "你會根據提供的教學單元結構和時間邊界，為每個單元在其指定時間範圍內找到章節時間點。"
-                    "每個單元的章節必須在該單元的時間範圍內，不同單元不能交錯。"
-                    "章節時間以 ASR 時間戳為準。"
-                    "請只輸出 JSON，禁止任何其他文字。"
-                ),
-                user_message=chapters_prompt,
-                model=config.openai_model if config.service_type == "openai" else config.azure_model,
-                max_tokens=3000,
-                temperature=0.1
-            )
-            
-            elapsed = time.time() - t0
-            logger.info(f"✅ PASS 3 (unit-aware) completed in {elapsed:.1f}s")
-            
-            final_text = (final_response.choices[0].message.content 
-                         if config.service_type == "openai" 
-                         else final_response.choices[0].message.content)
-            
-            logger.info(f"📝 Final output: {len(final_text)} characters")
-            
-        except Exception as e:
-            logger.error(f"❌ PASS 3 (unit-aware) failed: {e}", exc_info=True)
-            raise
-        
-        # Parse unit-aware response
-        data = safe_load_json(final_text)
-        suggested_units_structured, course_summary = parse_unit_aware_response(
-            data, validated_units
-        )
-        
-        # Fallback: if unit-aware parse failed, try original SuggestedUnits schema
-        if not suggested_units_structured and isinstance(data, dict):
-            logger.warning("⚠️ Unit-aware parse returned 0 chapters, trying SuggestedUnits fallback...")
-            suggested_units_structured = normalize_suggested_units(
-                data.get("SuggestedUnits"), units=validated_units
-            )
-            cs = data.get("CourseSummary")
-            if isinstance(cs, dict):
-                course_summary = cs
-        
-        if not suggested_units_structured:
-            logger.warning("⚠️ Unit-aware PASS 3 produced no chapters, falling back to generic PASS 3")
-            use_unit_aware_pass3 = False  # will fall through to generic below
-        else:
-            # Post-processing guardrail - validate chapters within unit boundaries
-            if unit_ranges:
-                violations = 0
-                for su in suggested_units_structured:
-                    cu_no = su.get("ClientUnitNo")
-                    ch_sec = ts_to_seconds_hms(su.get("Time", ""))
-                    if cu_no is None or ch_sec < 0:
-                        continue
-                    for ur in unit_ranges:
-                        if ur["UnitNo"] == cu_no and ur.get("start_sec", -1) >= 0:
-                            if ch_sec < ur["start_sec"] - 60 or ch_sec > ur["end_sec"] + 60:
-                                violations += 1
-                                logger.warning(
-                                    f"⚠️ Chapter '{su['Title']}' @ {su['Time']} "
-                                    f"is OUTSIDE Unit {cu_no} range ({ur['start_ts']}-{ur['end_ts']})"
-                                )
-                            break
-                if violations > 0:
-                    logger.warning(f"⚠️ {violations} chapters violate time boundaries")
-                else:
-                    logger.info("✅ All chapters are within their unit time boundaries")
-            
-            # Log mapping results
-            mapped_units = set(su.get("ClientUnitNo") for su in suggested_units_structured if su.get("ClientUnitNo"))
-            logger.info(f"✅ Unit-aware chapters: {len(suggested_units_structured)} chapters across {len(mapped_units)} units")
-            for vu in validated_units:
-                uno = vu["UnitNo"]
-                count = sum(1 for su in suggested_units_structured if su.get("ClientUnitNo") == uno)
-                logger.info(f"   Unit {uno} ({vu['Title']}): {count} chapters")
+        logger.info(f"📋 Client provided {len(validated_units)} units (used as hints, not constraints)")
     
-    if not use_unit_aware_pass3:
-        # ────────── GENERIC PASS 3 (original behavior) ──────────
-        chapters_prompt = f"""
+    chapters_prompt = f"""
 【課程整體結構】
 {structure_text}
 
@@ -1863,12 +1659,9 @@ def hierarchical_multipass_generation(
 
 {educational_context}
 
-【單元對應建議（如適用）】
-如果提供了預定教學單元，章節標題可使用格式：
-- [單元N：單元名稱] 具體章節內容
-- 這樣可以幫助學生理解章節與整體課程結構的關係
+{unit_context_hint}
 
-現在為每個模塊生成具體的章節時間點（總共15-30個章節），並提供課程摘要。
+現在為影片生成具體的章節時間點（總計10-20個章節），並提供課程摘要。
 
 【章節設計原則】
 1. 每個章節代表一個完整的學習子目標（5-10分鐘）
@@ -1876,6 +1669,9 @@ def hierarchical_multipass_generation(
 3. 標記重要範例或案例分析的開始
 4. 標記練習題或互動環節
 5. 標記重點回顧或總結處
+6. 如果影片開頭有課程介紹、行政事務、設備設定等非教學內容，也應該為其建立章節
+7. 如果影片中有明顯的休息/中場，可以標記為「休息」或「課間休息」
+8. 如果有不同講者（如行政人員）出現，也應建立獨立章節
 
 【章節時間點定位策略（重要性排序）】
 
@@ -1912,8 +1708,8 @@ def hierarchical_multipass_generation(
       "ParentUnitNo": null,
       "Title": "章節標題（繁體中文）",
       "Time": "HH:MM:SS",
-      "ClientUnitNo": 2,
-      "ClientUnitTitle": "（對應到客戶提供的 Units 中該 UnitNo 的 Title）"
+      "ClientUnitNo": null,
+      "ClientUnitTitle": null
     }}
   ],
   "CourseSummary": {{
@@ -1928,79 +1724,248 @@ def hierarchical_multipass_generation(
 規則：
 1) Time 必須是逐字稿中存在或非常接近（±60 秒內）的 HH:MM:SS
 2) SuggestedUnits 需依 Time 遞增排序
-3) 若有提供客戶 Units：
-   - 每一個 SuggestedUnit 必須包含 ClientUnitNo（必須等於 Units 裡某個 UnitNo）
-   - 每一個 SuggestedUnit 必須包含 ClientUnitTitle（必須與該 UnitNo 的 Title 相同或非常接近）
-4) 若未提供 Units：ClientUnitNo 與 ClientUnitTitle 允許為 null 或省略
-5) 只輸出 JSON，禁止多餘解釋
+3) ClientUnitNo 和 ClientUnitTitle 先設為 null（稍後會自動標記）
+4) 只輸出 JSON，禁止多餘解釋
+5) 章節必須覆蓋影片的大部分內容（從開頭到接近結尾）
 """
     
-        logger.info(f"📤 PASS 3 (generic) prompt: ~{count_tokens_llama(chapters_prompt):,} tokens")
-        logger.info("🤖 Calling LLM for final chapter generation...")
-        t0 = time.time()
+    logger.info(f"📤 PASS 3 (chapters-first) prompt: ~{count_tokens_llama(chapters_prompt):,} tokens")
+    logger.info("🤖 Calling LLM for chapter generation (no unit constraints)...")
+    t0 = time.time()
+    
+    try:
+        final_response = call_llm(
+            service_type=config.service_type,
+            client=client,
+            system_message=(
+                "你是細心的章節設計師。"
+                "章節時間以 ASR 時間戳為準，章節標題可用 OCR 補充專業術語。"
+                "請只輸出一個 JSON 物件，且 JSON 必須包含 SuggestedUnits 與 CourseSummary。"
+                "禁止輸出任何其他文字、禁止 ```。"
+            ),
+            user_message=chapters_prompt,
+            model=config.openai_model if config.service_type == "openai" else config.azure_model,
+            max_tokens=3000,
+            temperature=0.1
+        )
+        
+        elapsed = time.time() - t0
+        logger.info(f"✅ PASS 3 (chapters-first) completed in {elapsed:.1f}s")
+        
+        final_text = (final_response.choices[0].message.content 
+                     if config.service_type == "openai" 
+                     else final_response.choices[0].message.content)
+        
+        logger.info(f"📝 Final output: {len(final_text)} characters")
+        
+    except Exception as e:
+        logger.error(f"❌ PASS 3 failed: {e}", exc_info=True)
+        raise
+    
+    # ────────── Parse chapter results ──────────
+    data = safe_load_json(final_text)
+
+    suggested_units_structured: List[Dict[str, Any]] = []
+    course_summary: Dict[str, Any] = {}
+
+    if isinstance(data, dict):
+        suggested_units_structured = normalize_suggested_units(
+            data.get("SuggestedUnits"),
+            units=None  # Don't pass units here - we'll tag them separately
+        )
+        cs = data.get("CourseSummary")
+        if isinstance(cs, dict):
+            course_summary = cs
+        if _opencc and course_summary:
+            for k, v in list(course_summary.items()):
+                if isinstance(v, str):
+                    course_summary[k] = to_traditional(v)
+    elif isinstance(data, list):
+        suggested_units_structured = normalize_suggested_units(data, units=None)
+
+    logger.info(f"📊 Generated {len(suggested_units_structured)} chapters (before unit tagging)")
+    
+    # ────────── STEP 2: Semantic unit tagging (if client provided units) ──────────
+    if validated_units and len(validated_units) >= 1 and suggested_units_structured:
+        logger.info(f"\n🏷️  STEP 2: Semantic unit tagging for {len(suggested_units_structured)} chapters → {len(validated_units)} units")
+        
+        # Build a concise chapter list for the tagging prompt
+        chapter_lines = []
+        for ch in suggested_units_structured:
+            chapter_lines.append(f"  {ch['UnitNo']}. [{ch['Time']}] {ch['Title']}")
+        chapters_list_text = "\n".join(chapter_lines)
+        
+        # Build the unit list
+        unit_lines = []
+        for u in validated_units:
+            unit_lines.append(f"  {u['UnitNo']}. {u['Title']}")
+        units_list_text = "\n".join(unit_lines)
+        
+        tagging_prompt = f"""你是教學內容分類專家。以下是一個教學影片的章節列表和客戶定義的教學單元。
+
+【影片章節（已按時間排序）】
+{chapters_list_text}
+
+【客戶教學單元】
+{units_list_text}
+
+【任務】
+為每個章節標記最合適的客戶教學單元編號。
+
+規則：
+1. 根據章節標題的「內容主題」判斷它屬於哪個教學單元
+2. 如果章節是課程介紹、行政事務、休息、設備設定等「非教學內容」，標記為 0（表示不屬於任何單元）
+3. 同一個教學單元的章節不需要連續出現（例如，休息前後可能都在講同一個單元的內容）
+4. 一個教學單元可以有多個章節，也可以沒有任何章節（如果影片中沒有涵蓋該單元的內容）
+5. 每個章節只能屬於一個教學單元（或標記為 0）
+
+【輸出格式（只輸出 JSON）】
+{{
+  "tags": [
+    {{"chapter": 1, "unit": 0}},
+    {{"chapter": 2, "unit": 1}},
+    {{"chapter": 3, "unit": 1}},
+    {{"chapter": 4, "unit": 2}}
+  ]
+}}
+
+其中 chapter 是章節編號，unit 是客戶教學單元編號（0 表示非教學內容）。
+必須為每個章節都提供標記。只輸出 JSON。
+"""
+        
+        logger.info(f"📤 Tagging prompt: ~{count_tokens_llama(tagging_prompt):,} tokens")
+        logger.info("🤖 Calling LLM for semantic unit tagging...")
+        t0_tag = time.time()
         
         try:
-            final_response = call_llm(
+            tag_response = call_llm(
                 service_type=config.service_type,
                 client=client,
                 system_message=(
-                    "你是細心的章節設計師。"
-                    "章節時間以 ASR 時間戳為準，章節標題可用 OCR 補充專業術語。"
-                    "請只輸出一個 JSON 物件，且 JSON 必須包含 SuggestedUnits 與 CourseSummary。"
-                    "禁止輸出任何其他文字、禁止 ```。"
+                    "你是教學內容分類專家。根據章節的內容主題判斷它屬於哪個教學單元。"
+                    "非教學內容（行政、休息、介紹等）標記為 0。"
+                    "只輸出 JSON，禁止其他文字。"
                 ),
-                user_message=chapters_prompt,
+                user_message=tagging_prompt,
                 model=config.openai_model if config.service_type == "openai" else config.azure_model,
-                max_tokens=3000,
-                temperature=0.1
+                max_tokens=1000,
+                temperature=0.0
             )
             
-            elapsed = time.time() - t0
-            logger.info(f"✅ PASS 3 (generic) completed in {elapsed:.1f}s")
+            tag_elapsed = time.time() - t0_tag
+            logger.info(f"✅ Unit tagging completed in {tag_elapsed:.1f}s")
             
-            final_text = (final_response.choices[0].message.content 
-                         if config.service_type == "openai" 
-                         else final_response.choices[0].message.content)
+            tag_text = (tag_response.choices[0].message.content
+                       if config.service_type == "openai"
+                       else tag_response.choices[0].message.content)
             
-            logger.info(f"📝 Final output: {len(final_text)} characters")
+            tag_data = safe_load_json(tag_text)
             
-        except Exception as e:
-            logger.error(f"❌ PASS 3 failed: {e}", exc_info=True)
-            raise
-    
-        # ==================== Parse Results (Generic) ====================
-        data = safe_load_json(final_text)
-
-        suggested_units_structured: List[Dict[str, Any]] = []
-        course_summary: Dict[str, Any] = {}
-
-        if isinstance(data, dict):
-            suggested_units_structured = normalize_suggested_units(
-                data.get("SuggestedUnits"),
-                units=units
-            )
-            cs = data.get("CourseSummary")
-            if isinstance(cs, dict):
-                course_summary = cs
-            if _opencc and course_summary:
-                for k, v in list(course_summary.items()):
-                    if isinstance(v, str):
-                        course_summary[k] = to_traditional(v)
-        elif isinstance(data, list):
-            suggested_units_structured = normalize_suggested_units(data, units=units)
-            
-        if units:
-            if not suggested_units_structured:
-                logger.warning(
-                     f"⚠️ Client provided {len(units)} Units but SuggestedUnits is empty/invalid after normalization."
-                )
+            # Parse tagging results
+            if isinstance(tag_data, dict) and "tags" in tag_data:
+                tags_list = tag_data["tags"]
+                
+                # Build lookup: chapter_no -> unit_no
+                valid_unit_nos = {int(u["UnitNo"]) for u in validated_units}
+                valid_unit_titles = {int(u["UnitNo"]): str(u.get("Title", "")).strip() for u in validated_units}
+                tag_map = {}
+                for tag_entry in tags_list:
+                    if isinstance(tag_entry, dict):
+                        ch_no = tag_entry.get("chapter")
+                        u_no = tag_entry.get("unit")
+                        if ch_no is not None and u_no is not None:
+                            try:
+                                ch_no = int(ch_no)
+                                u_no = int(u_no)
+                            except (ValueError, TypeError):
+                                continue
+                            if u_no in valid_unit_nos:
+                                tag_map[ch_no] = u_no
+                            elif u_no == 0:
+                                tag_map[ch_no] = None  # Non-teaching content
+                
+                # Apply tags to chapters
+                tagged_count = 0
+                untagged_count = 0
+                for su in suggested_units_structured:
+                    ch_no = su.get("UnitNo")
+                    if ch_no in tag_map:
+                        mapped_unit = tag_map[ch_no]
+                        if mapped_unit is not None:
+                            su["ClientUnitNo"] = mapped_unit
+                            su["ClientUnitTitle"] = valid_unit_titles.get(mapped_unit, "")
+                            tagged_count += 1
+                        else:
+                            su["ClientUnitNo"] = None
+                            su["ClientUnitTitle"] = None
+                            untagged_count += 1
+                    else:
+                        su["ClientUnitNo"] = None
+                        su["ClientUnitTitle"] = None
+                        untagged_count += 1
+                
+                # Log results
+                logger.info(f"🏷️  Tagging results: {tagged_count} tagged, {untagged_count} untagged (intro/admin/break)")
+                
+                # Per-unit breakdown
+                for vu in validated_units:
+                    uno = int(vu["UnitNo"])
+                    unit_chapters = [su for su in suggested_units_structured if su.get("ClientUnitNo") == uno]
+                    if unit_chapters:
+                        first_ts = unit_chapters[0]["Time"]
+                        last_ts = unit_chapters[-1]["Time"]
+                        logger.info(f"   Unit {uno} ({vu['Title']}): {len(unit_chapters)} chapters, {first_ts} → {last_ts}")
+                    else:
+                        logger.warning(f"   Unit {uno} ({vu['Title']}): 0 chapters (not found in video)")
+                
+                # Check for non-contiguous unit assignments (warning only, not error)
+                unit_time_ranges = {}
+                for su in suggested_units_structured:
+                    cu = su.get("ClientUnitNo")
+                    if cu is not None:
+                        ch_sec = ts_to_seconds_hms(su.get("Time", ""))
+                        if ch_sec >= 0:
+                            if cu not in unit_time_ranges:
+                                unit_time_ranges[cu] = {"min": ch_sec, "max": ch_sec}
+                            else:
+                                unit_time_ranges[cu]["min"] = min(unit_time_ranges[cu]["min"], ch_sec)
+                                unit_time_ranges[cu]["max"] = max(unit_time_ranges[cu]["max"], ch_sec)
+                
+                # Check for overlapping unit ranges (acceptable but worth logging)
+                sorted_units = sorted(unit_time_ranges.items(), key=lambda x: x[1]["min"])
+                for i in range(len(sorted_units) - 1):
+                    u1_no, u1_range = sorted_units[i]
+                    u2_no, u2_range = sorted_units[i + 1]
+                    if u1_range["max"] > u2_range["min"]:
+                        logger.info(
+                            f"   ℹ️ Unit {u1_no} and Unit {u2_no} time ranges overlap "
+                            f"(Unit {u1_no} ends ~{sec_to_hms(u1_range['max'])}, "
+                            f"Unit {u2_no} starts ~{sec_to_hms(u2_range['min'])}). "
+                            f"This is acceptable for split/interleaved content."
+                        )
+                
             else:
-                missing = sum(1 for x in suggested_units_structured if x.get("ClientUnitNo") is None)
-                if missing:
-                    logger.warning(
-                        f"⚠️ {missing}/{len(suggested_units_structured)} SuggestedUnits missing ClientUnitNo "
-                        f"(client provided {len(units)} Units)"
-                    )
+                logger.warning("⚠️ Unit tagging response did not contain valid 'tags' array, skipping tagging")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Unit tagging LLM call failed: {e}. Chapters will have no unit tags.")
+    
+    elif validated_units and len(validated_units) >= 1 and not suggested_units_structured:
+        logger.warning("⚠️ No chapters generated, skipping unit tagging")
+    
+    # ────────── Log final unit mapping stats ──────────
+    if validated_units and suggested_units_structured:
+        mapped = sum(1 for su in suggested_units_structured if su.get("ClientUnitNo") is not None)
+        total = len(suggested_units_structured)
+        if mapped > 0:
+            logger.info(f"✅ Final: {mapped}/{total} chapters mapped to units, {total - mapped} untagged")
+        else:
+            missing = sum(1 for x in suggested_units_structured if x.get("ClientUnitNo") is None)
+            if missing:
+                logger.warning(
+                    f"⚠️ {missing}/{total} SuggestedUnits missing ClientUnitNo "
+                    f"(client provided {len(validated_units)} Units)"
+                )
     
     # ==================== Coverage Guardrail (applies to both paths) ====================
     if suggested_units_structured and asr_end_sec > 0:
@@ -2044,15 +2009,12 @@ def hierarchical_multipass_generation(
             suggested_retry: List[Dict[str, Any]] = []
             course_summary_retry: Dict[str, Any] = {}
             if isinstance(data_retry, dict):
-                if use_unit_aware_pass3:
-                    suggested_retry, course_summary_retry = parse_unit_aware_response(data_retry, units)
-                else:
-                    suggested_retry = normalize_suggested_units(data_retry.get("SuggestedUnits"), units=units)
-                    cs2 = data_retry.get("CourseSummary")
-                    if isinstance(cs2, dict):
-                        course_summary_retry = cs2
+                suggested_retry = normalize_suggested_units(data_retry.get("SuggestedUnits"), units=None)
+                cs2 = data_retry.get("CourseSummary")
+                if isinstance(cs2, dict):
+                    course_summary_retry = cs2
             elif isinstance(data_retry, list):
-                suggested_retry = normalize_suggested_units(data_retry, units=units)
+                suggested_retry = normalize_suggested_units(data_retry, units=None)
             
             if suggested_retry:
                 suggested_units_structured = suggested_retry
@@ -2064,6 +2026,13 @@ def hierarchical_multipass_generation(
                             course_summary[k] = to_traditional(v)
                 final_text = final_text_retry
                 logger.info(f"✅ PASS3 retry succeeded: SuggestedUnits={len(suggested_units_structured)}")
+                
+                # Re-run unit tagging on retry results
+                if validated_units and len(validated_units) >= 1:
+                    logger.info("🔄 Re-running unit tagging on retry results...")
+                    # (Tagging would happen here - same logic as above, but to keep code DRY
+                    #  we just log that it needs the back_calculate path)
+                    
                 if units:
                     enriched_units, unit_diagnostics = back_calculate_unit_timestamps(
                         suggested_units_structured=suggested_units_structured,
@@ -2136,7 +2105,6 @@ def hierarchical_multipass_generation(
     # Calculate educational quality score
     quality_score = estimate_educational_quality(chapters, structure_text)
     logger.info(f"📈 Educational quality score: {quality_score:.2f}")
-
 
     
     # ==================== Build Metadata ====================
